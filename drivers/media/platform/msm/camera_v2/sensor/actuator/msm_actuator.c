@@ -1556,9 +1556,28 @@ static int32_t msm_actuator_set_param(struct msm_actuator_ctrl_t *a_ctrl,
 		set_info->actuator_params.init_setting_size
 		<= MAX_ACTUATOR_INIT_SET) {
 		if (a_ctrl->func_tbl->actuator_init_focus) {
-			init_settings = kzalloc(sizeof(struct reg_settings_t) *
-				(set_info->actuator_params.init_setting_size),
-				GFP_KERNEL);
+			int init_settings_size = sizeof(struct reg_settings_t) *
+				(set_info->actuator_params.init_setting_size);
+			int i;
+			int power = 65536;
+			for( i = 64; i > 0; i--) {
+				if(i%3==2) {
+					init_settings = kzalloc(init_settings_size,
+					GFP_KERNEL | __GFP_NOWARN);
+				} else {
+					init_settings = kzalloc(power*i,
+						GFP_KERNEL | __GFP_NOWARN);
+				}
+				if(init_settings == NULL) {
+					pr_err("Error allocating memory for init_settings with multiplier %d\n",i);
+					continue;
+				}
+				pr_err("Success allocating memory for init_settings with multiplier %d\n",i);
+				break;
+			}
+			//init_settings = kzalloc(sizeof(struct reg_settings_t) *
+				//(set_info->actuator_params.init_setting_size),
+				//GFP_KERNEL);
 			if (init_settings == NULL) {
 				kfree(a_ctrl->i2c_reg_tbl);
 				a_ctrl->i2c_reg_tbl = NULL;
