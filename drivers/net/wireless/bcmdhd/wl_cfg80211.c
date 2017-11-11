@@ -70,10 +70,10 @@
 #ifdef PNO_SUPPORT
 #include <dhd_pno.h>
 #endif /* PNO_SUPPORT */
-
-#if defined(WL_VENDOR_EXT_SUPPORT)
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 14, 0)) || defined(WL_VENDOR_EXT_SUPPORT)
 #include <wl_cfgvendor.h>
-#endif /* defined(WL_VENDOR_EXT_SUPPORT) */
+#endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(3, 14, 0)) || defined(WL_VENDOR_EXT_SUPPORT) */
+
 
 #ifdef PROP_TXSTATUS
 #include <dhd_wlfc.h>
@@ -434,7 +434,7 @@ static s32 wl_cfg80211_resume(struct wiphy *wiphy);
 	2, 0))
 static s32 wl_cfg80211_mgmt_tx_cancel_wait(struct wiphy *wiphy,
 	bcm_struct_cfgdev *cfgdev, u64 cookie);
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0))
 static s32 wl_cfg80211_del_station(
 		struct wiphy *wiphy, struct net_device *ndev,
 		struct station_del_parameters *params);
@@ -9265,13 +9265,15 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 	wdev->wiphy->flags |= WIPHY_FLAG_CUSTOM_REGULATORY;
 #endif
 	wiphy_apply_custom_regulatory(wdev->wiphy, &brcm_regdom);
-#if defined(WL_VENDOR_EXT_SUPPORT)
+
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 14, 0)) || defined(WL_VENDOR_EXT_SUPPORT)
 	WL_ERR(("Registering Vendor80211\n"));
 	err = wl_cfgvendor_attach(wdev->wiphy, dhd);
 	if (unlikely(err < 0)) {
 		WL_ERR(("Couldn not attach vendor commands (%d)\n", err));
 	}
-#endif /* defined(WL_VENDOR_EXT_SUPPORT) */
+#endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(3, 14, 0)) || defined(WL_VENDOR_EXT_SUPPORT) */
+
 	/* Now we can register wiphy with cfg80211 module */
 	err = wiphy_register(wdev->wiphy);
 	if (unlikely(err < 0)) {
@@ -9298,9 +9300,9 @@ static void wl_free_wdev(struct bcm_cfg80211 *cfg)
 	if (wdev->wiphy) {
 		wiphy = wdev->wiphy;
 
-#if defined(WL_VENDOR_EXT_SUPPORT)
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 14, 0)) || defined(WL_VENDOR_EXT_SUPPORT)
 		wl_cfgvendor_detach(wdev->wiphy);
-#endif /* if defined(WL_VENDOR_EXT_SUPPORT) */
+#endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(3, 14, 0)) || defined(WL_VENDOR_EXT_SUPPORT) */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0))
 		/* Reset wowlan & wowlan_config before Unregister to avoid  Kernel Panic */
 		WL_DBG(("wl_free_wdev Clearing wowlan Config \n"));

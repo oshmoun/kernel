@@ -234,6 +234,22 @@ enum dhd_dongledump_type {
 	DUMP_TYPE_SCAN_TIMEOUT
 };
 
+enum dhd_hang_reason {
+	HANG_REASON_MASK = 0x8000,
+	HANG_REASON_IOCTL_RESP_TIMEOUT = 0x8001,
+	HANG_REASON_DONGLE_TRAP = 0x8002,
+	HANG_REASON_D3_ACK_TIMEOUT = 0x8003,
+	HANG_REASON_BUS_DOWN = 0x8004,
+	HANG_REASON_MSGBUF_LIVELOCK = 0x8006,
+	HANG_REASON_IFACE_OP_FAILURE = 0x8007,
+	HANG_REASON_HT_AVAIL_ERROR = 0x8008,
+	HANG_REASON_PCIE_RC_LINK_UP_FAIL = 0x8009,
+	HANG_REASON_PCIE_PKTID_ERROR = 0x800A,
+	HANG_REASON_PCIE_LINK_DOWN = 0x8805,
+	HANG_REASON_INVALID_EVENT_OR_DATA = 0x8806,
+	HANG_REASON_MAX = 0x8807
+};
+
 /* Packet alignment for most efficient SDIO (can change based on platform) */
 #ifndef DHD_SDALIGN
 #define DHD_SDALIGN	32
@@ -562,6 +578,7 @@ typedef struct dhd_pub {
 	int   d3ackcnt_timeout;		/* counter d3ack timeout to send HANG */
 #endif /* BCMPCIE */
 	bool hang_report;		/* enable hang report by default */
+	uint16 hang_reason;		/* reason codes for HANG event */
 #ifdef WLTDLS
 	bool tdls_enable;
 #endif

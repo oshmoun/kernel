@@ -5791,6 +5791,8 @@ dhd_open(struct net_device *net)
 	DHD_PERIM_LOCK(&dhd->pub);
 	dhd->pub.dongle_trap_occured = 0;
 	dhd->pub.hang_was_sent = 0;
+	dhd->pub.hang_reason = 0;
+
 #ifdef DHD_LOSSLESS_ROAMING
 	dhd->pub.dequeue_prec_map = ALLPRIO;
 #endif
