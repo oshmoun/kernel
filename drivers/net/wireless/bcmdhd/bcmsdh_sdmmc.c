@@ -101,6 +101,10 @@ DHD_PM_RESUME_WAIT_INIT(sdioh_request_buffer_wait);
 
 int sdioh_sdmmc_card_regread(sdioh_info_t *sd, int func, uint32 regaddr, int regsize, uint32 *data);
 
+void  sdmmc_set_clock_rate(sdioh_info_t *sd, uint hz);
+uint  sdmmc_get_clock_rate(sdioh_info_t *sd);
+void  sdmmc_set_clock_divisor(sdioh_info_t *sd, uint sd_div);
+
 static int
 sdioh_sdmmc_card_enablefuncs(sdioh_info_t *sd)
 {
@@ -194,6 +198,8 @@ sdioh_attach(osl_t *osh, struct sdio_func *func)
 		goto fail;
 	}
 
+	sd->sd_clk_rate = sdmmc_get_clock_rate(sd);
+	sd_err(("%s: sd clock rate = %u\n", __FUNCTION__, sd->sd_clk_rate));
 	sdioh_sdmmc_card_enablefuncs(sd);
 
 	sd_trace(("%s: Done\n", __FUNCTION__));
@@ -568,7 +574,14 @@ sdioh_iovar_op(sdioh_info_t *si, const char *name,
 		break;
 
 	case IOV_SVAL(IOV_DIVISOR):
-		sd_divisor = int_val;
+		/* set the clock to divisor, if value is non-zero & power of 2 */
+		if (int_val && !(int_val & (int_val - 1))) {
+			sd_divisor = int_val;
+			sdmmc_set_clock_divisor(si, sd_divisor);
+		} else {
+			sd_err(("%s: Invalid sd_divisor value, should be power of 2!\n",
+				__FUNCTION__));
+		}
 		break;
 
 	case IOV_GVAL(IOV_POWER):
@@ -1462,4 +1475,50 @@ SDIOH_API_RC
 sdioh_gpio_init(sdioh_info_t *sd)
 {
 	return SDIOH_API_RC_FAIL;
+}
+
+uint
+sdmmc_get_clock_rate(sdioh_info_t *sd)
+{
+	struct sdio_func *sdio_func = sd->func[0];
+	struct mmc_host *host = sdio_func->card->host;
+	return mmc_host_clk_rate(host);
+}
+
+
+void
+sdmmc_set_clock_rate(sdioh_info_t *sd, uint hz)
+{
+	struct sdio_func *sdio_func = sd->func[0];
+	struct mmc_host *host = sdio_func->card->host;
+	struct mmc_ios *ios = &host->ios;
+
+	mmc_host_clk_hold(host);
+	sd_info(("%s: Before change: sd clock rate is %u\n", __FUNCTION__, ios->clock));
+	if (hz < host->f_min) {
+		sd_err(("%s: Intended rate is below min rate, setting to min\n", __FUNCTION__));
+		hz = host->f_min;
+	}
+
+	if (hz > host->f_max) {
+		sd_err(("%s: Intended rate exceeds max rate, setting to max\n", __FUNCTION__));
+		hz = host->f_max;
+	}
+	ios->clock = hz;
+	host->ops->set_ios(host, ios);
+	sd_err(("%s: After change: sd clock rate is %u\n", __FUNCTION__, ios->clock));
+	mmc_host_clk_release(host);
+}
+
+void
+sdmmc_set_clock_divisor(sdioh_info_t *sd, uint sd_div)
+{
+	uint hz;
+	uint old_div = sdmmc_get_clock_rate(sd);
+	if (old_div == sd_div) {
+		return;
+	}
+
+	hz = sd->sd_clk_rate / sd_div;
+	sdmmc_set_clock_rate(sd, hz);
 }

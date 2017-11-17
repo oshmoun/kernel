@@ -85,7 +85,7 @@ struct sdioh_info {
 	struct scatterlist	sg_list[SDIOH_SDMMC_MAX_SG_ENTRIES];
 	struct sdio_func	fake_func0;
 	struct sdio_func	*func[SDIOD_MAX_IOFUNCS];
-
+	uint		sd_clk_rate;
 };
 
 /************************************************************
