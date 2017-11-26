@@ -1,7 +1,7 @@
 /*
  * SiliconBackplane System Memory core
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: sbsysmem.h 563222 2015-06-12 04:15:35Z $
+ * $Id: sbsysmem.h 563229 2015-06-12 04:50:06Z $
  */
 
 #ifndef	_SBSYSMEM_H

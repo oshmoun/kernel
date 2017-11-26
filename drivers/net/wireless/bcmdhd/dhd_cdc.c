@@ -1,7 +1,7 @@
 /*
  * DHD Protocol Module for CDC and BDC.
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_cdc.c 581085 2015-08-21 09:04:22Z $
+ * $Id: dhd_cdc.c 671577 2016-11-22 10:31:40Z $
  *
  * BDC is like CDC, except it includes a header for data packets to convey
  * packet priority over the bus, and flags (e.g. to indicate checksum status
@@ -108,19 +108,11 @@ dhdcdc_cmplt(dhd_pub_t *dhd, uint32 id, uint32 len)
 
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
 
-#if defined(CUSTOMER_HW5)
-	DHD_OS_WAKE_LOCK(dhd);
-#endif 
-
 	do {
 		ret = dhd_bus_rxctl(dhd->bus, (uchar*)&prot->msg, cdc_len);
 		if (ret < 0)
 			break;
 	} while (CDC_IOC_ID(ltoh32(prot->msg.flags)) != id);
-
-#if defined(CUSTOMER_HW5)
-	DHD_OS_WAKE_UNLOCK(dhd);
-#endif 
 
 	return ret;
 }
@@ -154,6 +146,16 @@ dhdcdc_query_ioctl(dhd_pub_t *dhd, int ifidx, uint cmd, void *buf, uint len, uin
 
 	memset(msg, 0, sizeof(cdc_ioctl_t));
 
+#ifdef BCMSPI
+	/* 11bit gSPI bus allows 2048bytes of max-data.  We restrict 'len'
+	 * value which is 8Kbytes for various 'get' commands to 2000.  48 bytes are
+	 * left for sw headers and misc.
+	 */
+	if (len > 2000) {
+		DHD_ERROR(("dhdcdc_query_ioctl: len is truncated to 2000 bytes\n"));
+		len = 2000;
+	}
+#endif /* BCMSPI */
 	msg->cmd = htol32(cmd);
 	msg->len = htol32(len);
 	msg->flags = (++prot->reqid << CDCF_IOC_ID_SHIFT);
@@ -209,6 +211,9 @@ done:
 	return ret;
 }
 
+#ifdef DHD_PM_CONTROL_FROM_FILE
+extern bool g_pm_control;
+#endif /* DHD_PM_CONTROL_FROM_FILE */
 
 static int
 dhdcdc_set_ioctl(dhd_pub_t *dhd, int ifidx, uint cmd, void *buf, uint len, uint8 action)
@@ -233,6 +238,24 @@ dhdcdc_set_ioctl(dhd_pub_t *dhd, int ifidx, uint cmd, void *buf, uint len, uint8
 		return -EIO;
 	}
 
+	if (cmd == WLC_SET_PM) {
+#ifdef DHD_PM_CONTROL_FROM_FILE
+		if (g_pm_control == TRUE) {
+			DHD_ERROR(("%s: SET PM ignored!(Requested:%d)\n",
+				__FUNCTION__, buf ? *(char *)buf : 0));
+			goto done;
+		}
+#endif /* DHD_PM_CONTROL_FROM_FILE */
+#if defined(WLAIBSS)
+		if (dhd->op_mode == DHD_FLAG_IBSS_MODE) {
+			DHD_ERROR(("%s: SET PM ignored for IBSS!(Requested:%d)\n",
+				__FUNCTION__, buf ? *(char *)buf : 0));
+			goto done;
+		}
+#endif /* WLAIBSS */
+		DHD_TRACE_HW4(("%s: SET PM to %d\n", __FUNCTION__, buf ? *(char *)buf : 0));
+	}
+
 	memset(msg, 0, sizeof(cdc_ioctl_t));
 
 	msg->cmd = htol32(cmd);
@@ -248,8 +271,7 @@ dhdcdc_set_ioctl(dhd_pub_t *dhd, int ifidx, uint cmd, void *buf, uint len, uint8
 		memcpy(prot->buf, buf, len);
 
 #ifdef DHD_ULP
-	if (buf && (!strncmp(buf, "wowl_force", sizeof("wowl_force")) ||
-			!strncmp(buf, "ulp", sizeof("ulp")))) {
+	if (buf && (!strncmp(buf, "ulp", sizeof("ulp")))) {
 		/* force all the writes after this point to NOT to use cached sbwad value */
 		dhd_ulp_disable_cached_sbwad(dhd);
 	}
@@ -300,7 +322,8 @@ dhd_prot_ioctl(dhd_pub_t *dhd, int ifidx, wl_ioctl_t * ioc, void * buf, int len)
 	uint8 action;
 
 	if ((dhd->busstate == DHD_BUS_DOWN) || dhd->hang_was_sent) {
-		DHD_ERROR(("%s : bus is down. we have nothing to do\n", __FUNCTION__));
+		DHD_ERROR(("%s : bus is down. we have nothing to do - bs: %d, has: %d\n",
+				__FUNCTION__, dhd->busstate, dhd->hang_was_sent));
 		goto done;
 	}
 
@@ -316,7 +339,7 @@ dhd_prot_ioctl(dhd_pub_t *dhd, int ifidx, wl_ioctl_t * ioc, void * buf, int len)
 			ioc->cmd, (unsigned long)ioc->cmd, prot->lastcmd,
 			(unsigned long)prot->lastcmd));
 		if ((ioc->cmd == WLC_SET_VAR) || (ioc->cmd == WLC_GET_VAR)) {
-			DHD_TRACE(("iovar cmd=%s\n", (char*)buf));
+			DHD_TRACE(("iovar cmd=%s\n", buf ? (char*)buf : "\0"));
 		}
 		goto done;
 	}
@@ -554,6 +577,14 @@ dhd_sync_with_dongle(dhd_pub_t *dhd)
 	wlc_rev_info_t revinfo;
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
 
+#ifdef DHD_FW_COREDUMP
+	/* Check the memdump capability */
+	dhd_get_memdump_info(dhd);
+#endif /* DHD_FW_COREDUMP */
+
+#ifdef BCMASSERT_LOG
+	dhd_get_assert_info(dhd);
+#endif /* BCMASSERT_LOG */
 
 	/* Get the device rev info */
 	memset(&revinfo, 0, sizeof(revinfo));
@@ -562,12 +593,11 @@ dhd_sync_with_dongle(dhd_pub_t *dhd)
 		goto done;
 
 
+	DHD_SSSR_DUMP_INIT(dhd);
+
 	dhd_process_cid_mac(dhd, TRUE);
-
 	ret = dhd_preinit_ioctls(dhd);
-
-	if (!ret)
-		dhd_process_cid_mac(dhd, FALSE);
+	dhd_process_cid_mac(dhd, FALSE);
 
 	/* Always assumes wl for now */
 	dhd->iswl = TRUE;

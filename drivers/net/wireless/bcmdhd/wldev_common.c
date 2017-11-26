@@ -1,7 +1,7 @@
 /*
  * Common function shared by Linux WEXT, cfg80211 and p2p drivers
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wldev_common.c 596015 2015-10-29 10:23:51Z $
+ * $Id: wldev_common.c 676275 2016-12-21 07:10:30Z $
  */
 
 #include <osl.h>
@@ -34,6 +34,7 @@
 
 #include <wldev_common.h>
 #include <bcmutils.h>
+#include <wl_cfg80211.h>
 
 #define htod32(i) (i)
 #define htod16(i) (i)
@@ -44,7 +45,13 @@
 
 #define	WLDEV_ERROR(args)						\
 	do {										\
-		printk(KERN_ERR "WLDEV-ERROR) %s : ", __func__);	\
+		printk(KERN_ERR "WLDEV-ERROR) ");	\
+		printk args;							\
+	} while (0)
+
+#define	WLDEV_INFO(args)						\
+	do {										\
+		printk(KERN_INFO "WLDEV-INFO) ");	\
 		printk args;							\
 	} while (0)
 
@@ -352,7 +359,7 @@ extern chanspec_t
 wl_chspec_driver_to_host(chanspec_t chanspec);
 #define WL_EXTRA_BUF_MAX 2048
 int wldev_get_mode(
-	struct net_device *dev, uint8 *cap)
+	struct net_device *dev, uint8 *cap, uint8 caplen)
 {
 	int error = 0;
 	int chanspec = 0;
@@ -360,11 +367,13 @@ int wldev_get_mode(
 	uint16 bandwidth = 0;
 	wl_bss_info_t *bss = NULL;
 	char* buf = NULL;
-	buf =  kmalloc(WL_EXTRA_BUF_MAX, GFP_KERNEL);
+
+	buf = kmalloc(WL_EXTRA_BUF_MAX, GFP_KERNEL);
 	if (!buf) {
-		WLDEV_ERROR(("%s:NOMEM\n", __FUNCTION__));
+		WLDEV_ERROR(("%s:ENOMEM\n", __FUNCTION__));
 		return -ENOMEM;
 	}
+
 	*(u32*) buf = htod32(WL_EXTRA_BUF_MAX);
 	error = wldev_ioctl(dev, WLC_GET_BSS_INFO, (void*)buf, WL_EXTRA_BUF_MAX, false);
 	if (error) {
@@ -381,21 +390,21 @@ int wldev_get_mode(
 
 	if (band == WL_CHANSPEC_BAND_2G) {
 		if (bss->n_cap)
-			strcpy(cap, "n");
+			strncpy(cap, "n", caplen);
 		else
-			strcpy(cap, "bg");
+			strncpy(cap, "bg", caplen);
 	} else if (band == WL_CHANSPEC_BAND_5G) {
 		if (bandwidth == WL_CHANSPEC_BW_80)
-			strcpy(cap, "ac");
+			strncpy(cap, "ac", caplen);
 		else if ((bandwidth == WL_CHANSPEC_BW_40) || (bandwidth == WL_CHANSPEC_BW_20)) {
 			if ((bss->nbss_cap & 0xf00) && (bss->n_cap))
-				strcpy(cap, "n|ac");
+				strncpy(cap, "n|ac", caplen);
 			else if (bss->n_cap)
-				strcpy(cap, "n");
+				strncpy(cap, "n", caplen);
 			else if (bss->vht_cap)
-				strcpy(cap, "ac");
+				strncpy(cap, "ac", caplen);
 			else
-				strcpy(cap, "a");
+				strncpy(cap, "a", caplen);
 		} else {
 			WLDEV_ERROR(("%s:Mode get failed\n", __FUNCTION__));
 			error = BCME_ERROR;
@@ -411,24 +420,36 @@ int wldev_set_country(
 {
 	int error = -1;
 	wl_country_t cspec = {{0}, 0, {0}};
+	wl_country_t cur_cspec = {{0}, 0, {0}};	/* current ccode */
 	scb_val_t scbval;
 	char smbuf[WLC_IOCTL_SMLEN];
+	struct wireless_dev *wdev = ndev_to_wdev(dev);
+	struct wiphy *wiphy = wdev->wiphy;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 
 	if (!country_code)
 		return error;
 
 	bzero(&scbval, sizeof(scb_val_t));
-	error = wldev_iovar_getbuf(dev, "country", NULL, 0, &cspec, sizeof(cspec), NULL);
+	error = wldev_iovar_getbuf(dev, "country", NULL, 0, &cur_cspec, sizeof(wl_country_t), NULL);
 	if (error < 0) {
 		WLDEV_ERROR(("%s: get country failed = %d\n", __FUNCTION__, error));
 		return error;
 	}
 
-	if ((error < 0) ||
-			dhd_force_country_change(dev) ||
-	    (strncmp(country_code, cspec.country_abbrev, WLC_CNTRY_BUF_SZ) != 0)) {
+	cspec.rev = revinfo;
+	memcpy(cspec.country_abbrev, country_code, WLC_CNTRY_BUF_SZ);
+	memcpy(cspec.ccode, country_code, WLC_CNTRY_BUF_SZ);
+	dhd_get_customized_country_code(dev, (char *)&cspec.country_abbrev, &cspec);
 
-		if (user_enforced) {
+	WLDEV_INFO(("%s: Current country %s rev %d\n",
+		__FUNCTION__, cur_cspec.ccode, cur_cspec.rev));
+
+	if ((error < 0) ||
+		dhd_force_country_change(dev) ||
+	    (strncmp(cspec.ccode, cur_cspec.ccode, WLC_CNTRY_BUF_SZ) != 0)) {
+
+		if ((user_enforced) && (wl_get_drv_status(cfg, CONNECTED, dev))) {
 			bzero(&scbval, sizeof(scb_val_t));
 			error = wldev_ioctl(dev, WLC_DISASSOC, &scbval, sizeof(scb_val_t), true);
 			if (error < 0) {
@@ -438,10 +459,6 @@ int wldev_set_country(
 			}
 		}
 
-		cspec.rev = revinfo;
-		memcpy(cspec.country_abbrev, country_code, WLC_CNTRY_BUF_SZ);
-		memcpy(cspec.ccode, country_code, WLC_CNTRY_BUF_SZ);
-		dhd_get_customized_country_code(dev, (char *)&cspec.country_abbrev, &cspec);
 		error = wldev_iovar_setbuf(dev, "country", &cspec, sizeof(cspec),
 			smbuf, sizeof(smbuf), NULL);
 		if (error < 0) {
@@ -450,7 +467,7 @@ int wldev_set_country(
 			return error;
 		}
 		dhd_bus_country_set(dev, &cspec, notify);
-		WLDEV_ERROR(("%s: set country for %s as %s rev %d\n",
+		WLDEV_INFO(("%s: set country for %s as %s rev %d\n",
 			__FUNCTION__, country_code, cspec.ccode, cspec.rev));
 	}
 	return 0;

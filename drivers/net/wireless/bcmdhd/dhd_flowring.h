@@ -1,4 +1,4 @@
-/**
+/*
  * @file Header file describing the flow rings DHD interfaces.
  *
  * Flow rings are transmit traffic (=propagating towards antenna) related entities.
@@ -6,7 +6,7 @@
  * Provides type definitions and function prototypes used to create, delete and manage flow rings at
  * high level.
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -29,7 +29,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_flowrings.h  jaganlv $
+ * $Id: dhd_flowring.h 672438 2016-11-28 12:35:24Z $
  */
 
 
@@ -50,39 +50,27 @@
 #define FLOWID_RESERVED                 (FLOW_RING_COMMON)
 
 #define FLOW_RING_STATUS_OPEN           0
-#define FLOW_RING_STATUS_PENDING        1
+#define FLOW_RING_STATUS_CREATE_PENDING	1
 #define FLOW_RING_STATUS_CLOSED         2
 #define FLOW_RING_STATUS_DELETE_PENDING 3
 #define FLOW_RING_STATUS_FLUSH_PENDING  4
-#define FLOW_RING_STATUS_STA_FREEING    5
 
+#ifdef IDLE_TX_FLOW_MGMT
+#define FLOW_RING_STATUS_SUSPENDED	5
+#define FLOW_RING_STATUS_RESUME_PENDING	6
+#endif /* IDLE_TX_FLOW_MGMT */
+#define FLOW_RING_STATUS_STA_FREEING    7
+
+#ifdef DHD_EFI
+#define DHD_FLOWRING_RX_BUFPOST_PKTSZ	1600
+#else
 #define DHD_FLOWRING_RX_BUFPOST_PKTSZ	2048
+#endif
 
 #define DHD_FLOW_PRIO_AC_MAP		0
 #define DHD_FLOW_PRIO_TID_MAP		1
+/* Flow ring prority map for lossless roaming */
 #define DHD_FLOW_PRIO_LLR_MAP		2
-
-/* Pkttag not compatible with PROP_TXSTATUS or WLFC */
-typedef struct dhd_pkttag_fr {
-	uint16  flowid;
-	uint16  ifid;
-	int     dataoff;
-	dmaaddr_t physaddr;
-	uint32 pa_len;
-
-} dhd_pkttag_fr_t;
-
-#define DHD_PKTTAG_SET_FLOWID(tag, flow)    ((tag)->flowid = (uint16)(flow))
-#define DHD_PKTTAG_SET_IFID(tag, idx)       ((tag)->ifid = (uint16)(idx))
-#define DHD_PKTTAG_SET_DATAOFF(tag, offset) ((tag)->dataoff = (int)(offset))
-#define DHD_PKTTAG_SET_PA(tag, pa)          ((tag)->physaddr = (pa))
-#define DHD_PKTTAG_SET_PA_LEN(tag, palen)   ((tag)->pa_len = (palen))
-
-#define DHD_PKTTAG_FLOWID(tag)              ((tag)->flowid)
-#define DHD_PKTTAG_IFID(tag)                ((tag)->ifid)
-#define DHD_PKTTAG_DATAOFF(tag)             ((tag)->dataoff)
-#define DHD_PKTTAG_PA(tag)                  ((tag)->physaddr)
-#define DHD_PKTTAG_PA_LEN(tag)              ((tag)->pa_len)
 
 /* Hashing a MacAddress for lkup into a per interface flow hash table */
 #define DHD_FLOWRING_HASH_SIZE    256
@@ -94,6 +82,7 @@ typedef struct dhd_pkttag_fr {
 #define DHD_IF_ROLE_AP(pub, idx)	(DHD_IF_ROLE(pub, idx) == WLC_E_IF_ROLE_AP)
 #define DHD_IF_ROLE_STA(pub, idx)	(DHD_IF_ROLE(pub, idx) == WLC_E_IF_ROLE_STA)
 #define DHD_IF_ROLE_P2PGO(pub, idx)	(DHD_IF_ROLE(pub, idx) == WLC_E_IF_ROLE_P2P_GO)
+#define DHD_IF_ROLE_WDS(pub, idx)	(DHD_IF_ROLE(pub, idx) == WLC_E_IF_ROLE_WDS)
 #define DHD_FLOW_RING(dhdp, flowid) \
 	(flow_ring_node_t *)&(((flow_ring_node_t *)((dhdp)->flow_ring_table))[flowid])
 
@@ -163,6 +152,24 @@ typedef struct flow_queue {
 /*  see wlfc_proto.h for tx status details */
 #define DHD_FLOWRING_MAXSTATUS_MSGS	5
 #define DHD_FLOWRING_TXSTATUS_CNT_UPDATE(bus, flowid, txstatus)
+
+/* Pkttag not compatible with PROP_TXSTATUS or WLFC */
+typedef struct dhd_pkttag_fr {
+	uint16  flowid;
+	uint16  ifid;
+	int     dataoff;
+	dmaaddr_t physaddr;
+	uint32 pa_len;
+} dhd_pkttag_fr_t;
+
+#define DHD_PKTTAG_SET_IFID(tag, idx)       ((tag)->ifid = (uint16)(idx))
+#define DHD_PKTTAG_SET_PA(tag, pa)          ((tag)->physaddr = (pa))
+#define DHD_PKTTAG_SET_PA_LEN(tag, palen)   ((tag)->pa_len = (palen))
+#define DHD_PKTTAG_IFID(tag)                ((tag)->ifid)
+#define DHD_PKTTAG_PA(tag)                  ((tag)->physaddr)
+#define DHD_PKTTAG_PA_LEN(tag)              ((tag)->pa_len)
+
+
 /** each flow ring is dedicated to a tid/sa/da combination */
 typedef struct flow_info {
 	uint8		tid;
@@ -185,6 +192,22 @@ typedef struct flow_ring_node {
 	flow_info_t	flow_info;
 	void		*prot_info;
 	void		*lock; /* lock for flowring access protection */
+
+#ifdef IDLE_TX_FLOW_MGMT
+	uint64		last_active_ts; /* contains last active timestamp */
+#endif /* IDLE_TX_FLOW_MGMT */
+#ifdef DEVICE_TX_STUCK_DETECT
+	/* Time stamp(msec) when last time a Tx packet completion is received on this flow ring */
+	uint32		tx_cmpl;
+	/*
+	 * Holds the tx_cmpl which was read during the previous
+	 * iteration of the stuck detection algo
+	 */
+	uint32		tx_cmpl_prev;
+	/* counter to decide if this particlur flow is stuck or not */
+	uint32		stuck_count;
+#endif /* DEVICE_TX_STUCK_DETECT */
+
 } flow_ring_node_t;
 
 typedef flow_ring_node_t flow_ring_table_t;
@@ -233,6 +256,7 @@ extern int dhd_flowid_update(dhd_pub_t *dhdp, uint8 ifindex, uint8 prio,
 extern void dhd_flowid_free(dhd_pub_t *dhdp, uint8 ifindex, uint16 flowid);
 
 extern void dhd_flow_rings_delete(dhd_pub_t *dhdp, uint8 ifindex);
+extern void dhd_flow_rings_flush(dhd_pub_t *dhdp, uint8 ifindex);
 
 extern void dhd_flow_rings_delete_for_peer(dhd_pub_t *dhdp, uint8 ifindex,
                 char *addr);

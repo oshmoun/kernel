@@ -1,7 +1,7 @@
 /*
  * Linux OS Independent Layer
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linux_osl.h 616819 2016-02-03 07:04:27Z $
+ * $Id: linux_osl.h 672413 2016-11-28 11:13:23Z $
  */
 
 #ifndef _linux_osl_h_
@@ -157,14 +157,19 @@ extern bool osl_is_flag_set(osl_t *osh, uint32 mask);
 	#define MALLOC(osh, size)	osl_malloc((osh), (size))
 	#define MALLOCZ(osh, size)	osl_mallocz((osh), (size))
 	#define MFREE(osh, addr, size)	osl_mfree((osh), (addr), (size))
+	#define VMALLOC(osh, size)	osl_vmalloc((osh), (size))
+	#define VMALLOCZ(osh, size)	osl_vmallocz((osh), (size))
+	#define VMFREE(osh, addr, size)	osl_vmfree((osh), (addr), (size))
 	#define MALLOCED(osh)		osl_malloced((osh))
 	#define MEMORY_LEFTOVER(osh) osl_check_memleak(osh)
 	extern void *osl_malloc(osl_t *osh, uint size);
 	extern void *osl_mallocz(osl_t *osh, uint size);
 	extern void osl_mfree(osl_t *osh, void *addr, uint size);
+	extern void *osl_vmalloc(osl_t *osh, uint size);
+	extern void *osl_vmallocz(osl_t *osh, uint size);
+	extern void osl_vmfree(osl_t *osh, void *addr, uint size);
 	extern uint osl_malloced(osl_t *osh);
 	extern uint osl_check_memleak(osl_t *osh);
-
 
 #define	MALLOC_FAILED(osh)	osl_malloc_failed((osh))
 extern uint osl_malloc_failed(osl_t *osh);
@@ -207,9 +212,13 @@ extern void osl_dma_unmap(osl_t *osh, dmaaddr_t pa, uint size, int direction);
 extern void osl_cpu_relax(void);
 #define OSL_CPU_RELAX() osl_cpu_relax()
 
+extern void osl_preempt_disable(osl_t *osh);
+extern void osl_preempt_enable(osl_t *osh);
+#define OSL_DISABLE_PREEMPTION(osh)	osl_preempt_disable(osh)
+#define OSL_ENABLE_PREEMPTION(osh)	osl_preempt_enable(osh)
+
 #if (!defined(DHD_USE_COHERENT_MEM_FOR_RING) && defined(__ARM_ARCH_7A__)) || \
-	(defined(STBLINUX) && defined(__ARM_ARCH_7A__)) || (defined(CONFIG_ARCH_MSM8996) || \
-	defined(CONFIG_SOC_EXYNOS8890))
+	(defined(STBLINUX) && defined(__ARM_ARCH_7A__))
 	extern void osl_cache_flush(void *va, uint size);
 	extern void osl_cache_inv(void *va, uint size);
 	extern void osl_prefetch(const void *ptr);
@@ -283,9 +292,12 @@ extern int osl_error(int bcmerror);
 #include <linux/kernel.h>       /* for vsn/printf's */
 #include <linux/string.h>       /* for mem*, str* */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 4, 29)
+extern uint64 osl_sysuptime_us(void);
 #define OSL_SYSUPTIME()		((uint32)jiffies_to_msecs(jiffies))
+#define OSL_SYSUPTIME_US()	osl_sysuptime_us()
 #else
 #define OSL_SYSUPTIME()		((uint32)jiffies * (1000 / HZ))
+#error "OSL_SYSUPTIME_US() may need to be defined"
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 4, 29) */
 #define	printf(fmt, args...)	printk(fmt , ## args)
 #include <linux/kernel.h>	/* for vsn/printf's */
@@ -297,12 +309,12 @@ extern int osl_error(int bcmerror);
 
 /* register access macros */
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 1)) && defined(CONFIG_64BIT) && \
-	defined(CONFIG_X86)
+#ifdef CONFIG_64BIT
+/* readq is defined only for 64 bit platform */
 #define R_REG(osh, r) (\
 	SELECT_BUS_READ(osh, \
 		({ \
-			__typeof(*(r)) __osl_v; \
+			__typeof(*(r)) __osl_v = 0; \
 			switch (sizeof(*(r))) { \
 				case sizeof(uint8):	__osl_v = \
 					readb((volatile uint8*)(r)); break; \
@@ -311,17 +323,17 @@ extern int osl_error(int bcmerror);
 				case sizeof(uint32):	__osl_v = \
 					readl((volatile uint32*)(r)); break; \
 				case sizeof(uint64):	__osl_v = \
-					readq((volatile uint64*)(r)); break;  \
+					readq((volatile uint64*)(r)); break; \
 			} \
 			__osl_v; \
 		}), \
 		OSL_READ_REG(osh, r)) \
 )
-#else
+#else /* !CONFIG_64BIT */
 #define R_REG(osh, r) (\
 	SELECT_BUS_READ(osh, \
 		({ \
-			__typeof(*(r)) __osl_v; \
+			__typeof(*(r)) __osl_v = 0; \
 			switch (sizeof(*(r))) { \
 				case sizeof(uint8):	__osl_v = \
 					readb((volatile uint8*)(r)); break; \
@@ -334,9 +346,10 @@ extern int osl_error(int bcmerror);
 		}), \
 		OSL_READ_REG(osh, r)) \
 )
-#endif /* KERNEL_VERSION(3, 11, 1)) && defined(CONFIG_64BIT) && defined(CONFIG_X86) */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 1)) && defined(CONFIG_64BIT) && \
-	defined(CONFIG_X86)
+#endif /* CONFIG_64BIT */
+
+#ifdef CONFIG_64BIT
+/* writeq is defined only for 64 bit platform */
 #define W_REG(osh, r, v) do { \
 	SELECT_BUS_WRITE(osh, \
 		switch (sizeof(*(r))) { \
@@ -347,7 +360,8 @@ extern int osl_error(int bcmerror);
 		}, \
 		(OSL_WRITE_REG(osh, r, v))); \
 	} while (0)
-#else
+
+#else /* !CONFIG_64BIT */
 #define W_REG(osh, r, v) do { \
 	SELECT_BUS_WRITE(osh, \
 		switch (sizeof(*(r))) { \
@@ -357,7 +371,7 @@ extern int osl_error(int bcmerror);
 		}, \
 		(OSL_WRITE_REG(osh, r, v))); \
 	} while (0)
-#endif  /* KERNEL_VERSION(3, 11, 1)) && defined(CONFIG_64BIT) && defined(CONFIG_X86) */
+#endif /* CONFIG_64BIT */
 
 #define	AND_REG(osh, r, v)		W_REG(osh, (r), R_REG(osh, r) & (v))
 #define	OR_REG(osh, r, v)		W_REG(osh, (r), R_REG(osh, r) | (v))
@@ -699,7 +713,6 @@ extern int bcmp(const void *b1, const void *b2, size_t len);
 extern void bzero(void *b, size_t len);
 #endif /* ! BCMDRIVER */
 
-
 /* Current STB 7445D1 doesn't use ACP and it is non-coherrent.
  * Adding these dummy values for build apss only
  * When we revisit need to change these.
@@ -745,6 +758,9 @@ typedef struct sec_cma_info {
 #define CMA_DMA_DESC_MEMBLOCK	(SEC_CMA_COHERENT_BLK * SEC_CMA_COHERENT_MAX)
 #define CMA_DMA_DATA_MEMBLOCK	(CMA_BUFSIZE_4K*CMA_BUFNUM)
 #define	CMA_MEMBLOCK		(CMA_DMA_DESC_MEMBLOCK + CMA_DMA_DATA_MEMBLOCK)
+#define CONT_REGION	0x02		/* Region CMA */
+#else
+#define CONT_REGION	0x00		/* To access the MIPs mem, Not yet... */
 #endif /* !defined __ARM_ARCH_7A__ */
 
 #define SEC_DMA_ALIGN	(1<<16)
@@ -777,5 +793,17 @@ typedef struct sk_buff_head PKT_LIST;
 #define PKTLIST_DEQ(x)		skb_dequeue((struct sk_buff_head *)(x))
 #define PKTLIST_UNLINK(x, y)	skb_unlink((struct sk_buff *)(y), (struct sk_buff_head *)(x))
 #define PKTLIST_FINI(x)		skb_queue_purge((struct sk_buff_head *)(x))
+
+typedef struct osl_timer {
+	struct timer_list *timer;
+	bool   set;
+} osl_timer_t;
+
+typedef void (*linux_timer_fn)(ulong arg);
+
+extern osl_timer_t * osl_timer_init(osl_t *osh, const char *name, void (*fn)(void *arg), void *arg);
+extern void osl_timer_add(osl_t *osh, osl_timer_t *t, uint32 ms, bool periodic);
+extern void osl_timer_update(osl_t *osh, osl_timer_t *t, uint32 ms, bool periodic);
+extern bool osl_timer_del(osl_t *osh, osl_timer_t *t);
 
 #endif	/* _linux_osl_h_ */

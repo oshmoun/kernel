@@ -1,7 +1,7 @@
 /*
  * SDIO access interface for drivers - linux specific (pci only)
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmsdh_linux.c 579798 2015-08-17 07:00:05Z $
+ * $Id: bcmsdh_linux.c 672609 2016-11-29 07:00:46Z $
  */
 
 /**
@@ -211,6 +211,29 @@ int bcmsdh_remove(bcmsdh_info_t *bcmsdh)
 	return 0;
 }
 
+#ifdef DHD_WAKE_STATUS
+int bcmsdh_get_total_wake(bcmsdh_info_t *bcmsdh)
+{
+	return bcmsdh->total_wake_count;
+}
+
+int bcmsdh_set_get_wake(bcmsdh_info_t *bcmsdh, int flag)
+{
+	bcmsdh_os_info_t *bcmsdh_osinfo = bcmsdh->os_cxt;
+	unsigned long flags;
+	int ret;
+
+	spin_lock_irqsave(&bcmsdh_osinfo->oob_irq_spinlock, flags);
+
+	ret = bcmsdh->pkt_wake;
+	bcmsdh->total_wake_count += flag;
+	bcmsdh->pkt_wake = flag;
+
+	spin_unlock_irqrestore(&bcmsdh_osinfo->oob_irq_spinlock, flags);
+	return ret;
+}
+#endif /* DHD_WAKE_STATUS */
+
 int bcmsdh_suspend(bcmsdh_info_t *bcmsdh)
 {
 	bcmsdh_os_info_t *bcmsdh_osinfo = bcmsdh->os_cxt;
@@ -294,7 +317,7 @@ bool bcmsdh_dev_pm_enabled(bcmsdh_info_t *bcmsdh)
 	return bcmsdh_osinfo->dev_wake_enabled;
 }
 
-#if defined(OOB_INTR_ONLY)
+#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID)
 void bcmsdh_oob_intr_set(bcmsdh_info_t *bcmsdh, bool enable)
 {
 	unsigned long flags;
@@ -320,7 +343,9 @@ static irqreturn_t wlan_oob_irq(int irq, void *dev_id)
 	bcmsdh_info_t *bcmsdh = (bcmsdh_info_t *)dev_id;
 	bcmsdh_os_info_t *bcmsdh_osinfo = bcmsdh->os_cxt;
 
+#ifndef BCMSPI_ANDROID
 	bcmsdh_oob_intr_set(bcmsdh, FALSE);
+#endif /* !BCMSPI_ANDROID */
 	bcmsdh_osinfo->oob_irq_handler(bcmsdh_osinfo->oob_irq_handler_context);
 
 	return IRQ_HANDLED;
@@ -341,18 +366,26 @@ int bcmsdh_oob_intr_register(bcmsdh_info_t *bcmsdh, bcmsdh_cb_fn_t oob_irq_handl
 		(int)bcmsdh_osinfo->oob_irq_num, (int)bcmsdh_osinfo->oob_irq_flags));
 	bcmsdh_osinfo->oob_irq_handler = oob_irq_handler;
 	bcmsdh_osinfo->oob_irq_handler_context = oob_irq_handler_context;
+	bcmsdh_osinfo->oob_irq_enabled = TRUE;
+	bcmsdh_osinfo->oob_irq_registered = TRUE;
 	err = request_irq(bcmsdh_osinfo->oob_irq_num, wlan_oob_irq,
 		bcmsdh_osinfo->oob_irq_flags, "bcmsdh_sdmmc", bcmsdh);
 	if (err) {
 		SDLX_MSG(("%s: request_irq failed with %d\n", __FUNCTION__, err));
+		bcmsdh_osinfo->oob_irq_enabled = FALSE;
+		bcmsdh_osinfo->oob_irq_registered = FALSE;
 		return err;
 	}
 
+#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI)
+	if (device_may_wakeup(bcmsdh_osinfo->dev)) {
+#endif /* CONFIG_ARCH_RHEA || CONFIG_ARCH_CAPRI */
 		err = enable_irq_wake(bcmsdh_osinfo->oob_irq_num);
 		if (!err)
 			bcmsdh_osinfo->oob_irq_wake_enabled = TRUE;
-	bcmsdh_osinfo->oob_irq_enabled = TRUE;
-	bcmsdh_osinfo->oob_irq_registered = TRUE;
+#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI)
+	}
+#endif /* CONFIG_ARCH_RHEA || CONFIG_ARCH_CAPRI */
 	return err;
 }
 
@@ -367,9 +400,15 @@ void bcmsdh_oob_intr_unregister(bcmsdh_info_t *bcmsdh)
 		return;
 	}
 	if (bcmsdh_osinfo->oob_irq_wake_enabled) {
+#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI)
+		if (device_may_wakeup(bcmsdh_osinfo->dev)) {
+#endif /* CONFIG_ARCH_RHEA || CONFIG_ARCH_CAPRI */
 			err = disable_irq_wake(bcmsdh_osinfo->oob_irq_num);
 			if (!err)
 				bcmsdh_osinfo->oob_irq_wake_enabled = FALSE;
+#if defined(CONFIG_ARCH_RHEA) || defined(CONFIG_ARCH_CAPRI)
+		}
+#endif /* CONFIG_ARCH_RHEA || CONFIG_ARCH_CAPRI */
 	}
 	if (bcmsdh_osinfo->oob_irq_enabled) {
 		disable_irq(bcmsdh_osinfo->oob_irq_num);
@@ -378,7 +417,7 @@ void bcmsdh_oob_intr_unregister(bcmsdh_info_t *bcmsdh)
 	free_irq(bcmsdh_osinfo->oob_irq_num, bcmsdh);
 	bcmsdh_osinfo->oob_irq_registered = FALSE;
 }
-#endif 
+#endif /* defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) */
 
 /* Module parameters specific to each host-controller driver */
 
@@ -432,6 +471,10 @@ EXPORT_SYMBOL(bcmsdh_intr_dereg);
 #if defined(DHD_DEBUG)
 EXPORT_SYMBOL(bcmsdh_intr_pending);
 #endif
+
+#if defined(BT_OVER_SDIO)
+EXPORT_SYMBOL(bcmsdh_btsdio_interface_init);
+#endif /* defined (BT_OVER_SDIO) */
 
 EXPORT_SYMBOL(bcmsdh_devremove_reg);
 EXPORT_SYMBOL(bcmsdh_cfg_read);

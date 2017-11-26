@@ -1,7 +1,7 @@
 /*
  * Trace log blocks sent over HBUS
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,10 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id$
+ *
+ * <<Broadcom-WL-IPTag/Open:>>
+ *
+ * $Id: event_trace.h 645268 2016-06-23 08:39:17Z $
  */
 
 /**
@@ -63,7 +66,6 @@
 #define TRACE_BT_COEX_BT_HID_START		0x800d
 #define TRACE_BT_COEX_BT_HID_STOP		0x800e
 #define TRACE_ROAM_AUTH_STARTED			0x800f
-
 /* Event ID for NAN, start from 0x9000 */
 #define TRACE_NAN_CLUSTER_STARTED               0x9000
 #define TRACE_NAN_CLUSTER_JOINED                0x9001
@@ -74,26 +76,41 @@
 
 /* Parameters of wifi logger events are TLVs */
 /* Event parameters tags are defined as: */
-#define TRACE_TAG_VENDOR_SPECIFIC		0 /* take a byte stream as parameter */
-#define TRACE_TAG_BSSID				1 /* takes a 6 bytes MAC address as parameter */
-#define TRACE_TAG_ADDR				2 /* takes a 6 bytes MAC address as parameter */
-#define TRACE_TAG_SSID				3 /* takes a 32 bytes SSID address as parameter */
-#define TRACE_TAG_STATUS			4 /* takes an integer as parameter */
-#define TRACE_TAG_CHANNEL_SPEC			5 /* takes one or more wifi_channel_spec as */
-						  /* parameter */
-#define TRACE_TAG_WAKE_LOCK_EVENT		6 /* takes a wake_lock_event struct as parameter */
-#define TRACE_TAG_ADDR1				7 /* takes a 6 bytes MAC address as parameter */
-#define TRACE_TAG_ADDR2				8 /* takes a 6 bytes MAC address as parameter */
-#define TRACE_TAG_ADDR3				9 /* takes a 6 bytes MAC address as parameter */
-#define TRACE_TAG_ADDR4				10 /* takes a 6 bytes MAC address as parameter */
-#define TRACE_TAG_TSF				11 /* take a 64 bits TSF value as parameter */
-#define TRACE_TAG_IE				12 /* take one or more specific 802.11 IEs */
-						   /* parameter, IEs are in turn indicated in */
-						   /* TLV format as per 802.11 spec */
-#define TRACE_TAG_INTERFACE			13 /* take interface name as parameter */
-#define TRACE_TAG_REASON_CODE			14 /* take a reason code as per 802.11 */
-						   /* as parameter */
-#define TRACE_TAG_RATE_MBPS			15 /* take a wifi rate in 0.5 mbps */
+#define TRACE_TAG_VENDOR_SPECIFIC	0 /* take a byte stream as parameter */
+#define TRACE_TAG_BSSID			1 /* takes a 6 bytes MAC address as parameter */
+#define TRACE_TAG_ADDR			2 /* takes a 6 bytes MAC address as parameter */
+#define TRACE_TAG_SSID			3 /* takes a 32 bytes SSID address as parameter */
+#define TRACE_TAG_STATUS		4 /* takes an integer as parameter */
+#define TRACE_TAG_CHANNEL_SPEC		5 /* takes one or more wifi_channel_spec as */
+					  /* parameter */
+#define TRACE_TAG_WAKE_LOCK_EVENT	6 /* takes a wake_lock_event struct as parameter */
+#define TRACE_TAG_ADDR1			7 /* takes a 6 bytes MAC address as parameter */
+#define TRACE_TAG_ADDR2			8 /* takes a 6 bytes MAC address as parameter */
+#define TRACE_TAG_ADDR3			9 /* takes a 6 bytes MAC address as parameter */
+#define TRACE_TAG_ADDR4			10 /* takes a 6 bytes MAC address as parameter */
+#define TRACE_TAG_TSF			11 /* take a 64 bits TSF value as parameter */
+#define TRACE_TAG_IE			12 /* take one or more specific 802.11 IEs */
+					   /* parameter, IEs are in turn indicated in */
+					   /* TLV format as per 802.11 spec */
+#define TRACE_TAG_INTERFACE		13 /* take interface name as parameter */
+#define TRACE_TAG_REASON_CODE		14 /* take a reason code as per 802.11 */
+					   /* as parameter */
+#define TRACE_TAG_RATE_MBPS		15 /* take a wifi rate in 0.5 mbps */
+#define TRACE_TAG_REQUEST_ID		16 /* take an integer as parameter */
+#define TRACE_TAG_BUCKET_ID		17 /* take an integer as parameter */
+#define TRACE_TAG_GSCAN_PARAMS		18 /* takes a wifi_scan_cmd_params struct as parameter */
+#define TRACE_TAG_GSCAN_CAPABILITIES	19 /* takes a wifi_gscan_capabilities struct as parameter */
+#define TRACE_TAG_SCAN_ID		20 /* take an integer as parameter */
+#define TRACE_TAG_RSSI			21 /* take an integer as parameter */
+#define TRACE_TAG_CHANNEL		22 /* take an integer as parameter */
+#define TRACE_TAG_LINK_ID		23 /* take an integer as parameter */
+#define TRACE_TAG_LINK_ROLE		24 /* take an integer as parameter */
+#define TRACE_TAG_LINK_STATE		25 /* take an integer as parameter */
+#define TRACE_TAG_LINK_TYPE		26 /* take an integer as parameter */
+#define TRACE_TAG_TSCO			27 /* take an integer as parameter */
+#define TRACE_TAG_RSCO			28 /* take an integer as parameter */
+#define TRACE_TAG_EAPOL_MESSAGE_TYPE	29 /* take an integer as parameter */
+					   /* M1-1, M2-2, M3-3, M4-4 */
 
 typedef union {
 	struct {
@@ -101,6 +118,6 @@ typedef union {
 		uint16 version:	16;
 	};
 	uint32 t;
-} wl_event_log_id_t;
+} wl_event_log_id_ver_t;
 
 #endif	/* _WL_DIAG_H */

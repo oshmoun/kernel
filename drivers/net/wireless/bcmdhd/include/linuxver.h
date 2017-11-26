@@ -2,7 +2,7 @@
  * Linux-specific abstractions to gain some independence from linux kernel versions.
  * Pave over some 2.2 versus 2.4 versus 2.6 kernel differences.
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: linuxver.h 603541 2015-12-02 11:53:36Z $
+ * $Id: linuxver.h 646721 2016-06-30 12:36:41Z $
  */
 
 #ifndef _linuxver_h_
@@ -622,7 +622,7 @@ static inline bool binary_sema_up(tsk_ctl_t *tsk)
 		spin_lock_init(&((tsk_ctl)->spinlock)); \
 		DBG_THR(("%s(): thread:%s:%lx started\n", __FUNCTION__, \
 			(tsk_ctl)->proc_name, (tsk_ctl)->thr_pid)); \
-	} \
+	}; \
 }
 
 #define PROC_STOP(tsk_ctl) \
@@ -763,5 +763,12 @@ not match our unaligned address for < 2.6.24
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)
 #pragma GCC diagnostic pop
 #endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0))
+static inline struct inode *file_inode(const struct file *f)
+{
+	return f->f_dentry->d_inode;
+}
+#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)) */
 
 #endif /* _linuxver_h_ */

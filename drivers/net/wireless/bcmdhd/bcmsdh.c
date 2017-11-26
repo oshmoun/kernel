@@ -2,7 +2,7 @@
  *  BCMSDH interface glue
  *  implement bcmsdh API for SDIOH driver
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -25,7 +25,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmsdh.c 572557 2015-07-20 07:12:29Z $
+ * $Id: bcmsdh.c 671319 2016-11-21 14:27:29Z $
  */
 
 /**
@@ -47,11 +47,22 @@
 #include <sbsdio.h>	/* SDIO device core hardware definitions. */
 #include <sdio.h>	/* SDIO Device and Protocol Specs */
 
+#if defined(BT_OVER_SDIO)
+#include <dhd_bt_interface.h>
+#endif /* defined (BT_OVER_SDIO) */
+
 #define SDIOH_API_ACCESS_RETRY_LIMIT	2
 const uint bcmsdh_msglevel = BCMSDH_ERROR_VAL;
 
 /* local copy of bcm sd handler */
 bcmsdh_info_t * l_bcmsdh = NULL;
+
+#if defined(BT_OVER_SDIO)
+struct sdio_func *func_f3 = NULL;
+static f3intr_handler processf3intr = NULL;
+static dhd_hang_notification process_dhd_hang_notification = NULL;
+static dhd_hang_state_t g_dhd_hang_state = NO_HANG_STATE;
+#endif /* defined (BT_OVER_SDIO) */
 
 
 #if defined(OOB_INTR_ONLY) && defined(HW_OOB)
@@ -64,6 +75,81 @@ bcmsdh_enable_hw_oob_intr(bcmsdh_info_t *sdh, bool enable)
 	sdioh_enable_hw_oob_intr(sdh->sdioh, enable);
 }
 #endif
+
+#if defined(BT_OVER_SDIO)
+void bcmsdh_btsdio_process_hang_state(dhd_hang_state_t new_state)
+{
+	bool state_change = false;
+
+	BCMSDH_ERROR(("%s: DHD hang state changed - [%d] -> [%d]\n",
+		__FUNCTION__, g_dhd_hang_state, new_state));
+
+	if (g_dhd_hang_state == new_state)
+		return;
+
+	switch (g_dhd_hang_state) {
+		case NO_HANG_STATE:
+			if (HANG_START_STATE == new_state)
+				state_change = true;
+		break;
+
+		case HANG_START_STATE:
+			if (HANG_RECOVERY_STATE == new_state ||
+				NO_HANG_STATE == new_state)
+				state_change = true;
+		break;
+
+		case HANG_RECOVERY_STATE:
+			if (NO_HANG_STATE == new_state)
+				state_change = true;
+		break;
+
+		default:
+			BCMSDH_ERROR(("%s: Unhandled Hang state\n", __FUNCTION__));
+		break;
+	}
+
+	if (!state_change) {
+		BCMSDH_ERROR(("%s: Hang state cannot be changed\n", __FUNCTION__));
+		return;
+	}
+
+	g_dhd_hang_state = new_state;
+}
+
+void bcmsdh_btsdio_process_f3_intr(void)
+{
+	if (processf3intr && (g_dhd_hang_state == NO_HANG_STATE))
+		processf3intr(func_f3);
+}
+
+void bcmsdh_btsdio_process_dhd_hang_notification(bool wifi_recovery_completed)
+{
+	bcmsdh_btsdio_process_hang_state(HANG_START_STATE);
+
+	if (process_dhd_hang_notification)
+		process_dhd_hang_notification(func_f3, wifi_recovery_completed);
+
+	/* WiFi was off, so HANG_RECOVERY_STATE is not needed */
+	if (wifi_recovery_completed)
+		bcmsdh_btsdio_process_hang_state(NO_HANG_STATE);
+	else {
+		bcmsdh_btsdio_process_hang_state(HANG_RECOVERY_STATE);
+	}
+}
+
+void bcmsdh_btsdio_interface_init(struct sdio_func *func,
+	f3intr_handler f3intr_fun, dhd_hang_notification hang_notification)
+{
+	bcmsdh_info_t *bcmsdh = (bcmsdh_info_t *)l_bcmsdh;
+	BCMSDH_INFO(("%s: func %p \n", __FUNCTION__, func));
+	func_f3 = func;
+	processf3intr = f3intr_fun;
+	sdioh_sdmmc_card_enable_func_f3(bcmsdh->sdioh, func);
+	process_dhd_hang_notification = hang_notification;
+
+} EXPORT_SYMBOL(bcmsdh_btsdio_interface_init);
+#endif /* defined (BT_OVER_SDIO) */
 
 /* Attach BCMSDH layer to SDIO Host Controller Driver
  *
@@ -142,9 +228,17 @@ bcmsdh_intr_enable(void *sdh)
 {
 	bcmsdh_info_t *bcmsdh = (bcmsdh_info_t *)sdh;
 	SDIOH_API_RC status;
+#ifdef BCMSPI_ANDROID
+	uint32 data;
+#endif /* BCMSPI_ANDROID */
 	ASSERT(bcmsdh);
 
 	status = sdioh_interrupt_set(bcmsdh->sdioh, TRUE);
+#ifdef BCMSPI_ANDROID
+	data = bcmsdh_cfg_read_word(sdh, 0, 4, NULL);
+	data |= 0xE0E70000;
+	bcmsdh_cfg_write_word(sdh, 0, 4, data, NULL);
+#endif /* BCMSPI_ANDROID */
 	return (SDIOH_API_SUCCESS(status) ? 0 : BCME_ERROR);
 }
 
@@ -153,9 +247,17 @@ bcmsdh_intr_disable(void *sdh)
 {
 	bcmsdh_info_t *bcmsdh = (bcmsdh_info_t *)sdh;
 	SDIOH_API_RC status;
+#ifdef BCMSPI_ANDROID
+	uint32 data;
+#endif /* BCMSPI_ANDROID */
 	ASSERT(bcmsdh);
 
 	status = sdioh_interrupt_set(bcmsdh->sdioh, FALSE);
+#ifdef BCMSPI_ANDROID
+	data = bcmsdh_cfg_read_word(sdh, 0, 4, NULL);
+	data &= ~0xE0E70000;
+	bcmsdh_cfg_write_word(sdh, 0, 4, data, NULL);
+#endif /* BCMSPI_ANDROID */
 	return (SDIOH_API_SUCCESS(status) ? 0 : BCME_ERROR);
 }
 
@@ -164,6 +266,10 @@ bcmsdh_intr_reg(void *sdh, bcmsdh_cb_fn_t fn, void *argh)
 {
 	bcmsdh_info_t *bcmsdh = (bcmsdh_info_t *)sdh;
 	SDIOH_API_RC status;
+
+	if (!bcmsdh)
+		bcmsdh = l_bcmsdh;
+
 	ASSERT(bcmsdh);
 
 	status = sdioh_interrupt_register(bcmsdh->sdioh, fn, argh);
@@ -175,6 +281,10 @@ bcmsdh_intr_dereg(void *sdh)
 {
 	bcmsdh_info_t *bcmsdh = (bcmsdh_info_t *)sdh;
 	SDIOH_API_RC status;
+
+	if (!bcmsdh)
+		bcmsdh = l_bcmsdh;
+
 	ASSERT(bcmsdh);
 
 	status = sdioh_interrupt_deregister(bcmsdh->sdioh);
@@ -241,7 +351,7 @@ bcmsdh_cfg_read(void *sdh, uint fnc_num, uint32 addr, int *err)
 	            fnc_num, addr, data));
 
 	return data;
-}
+} EXPORT_SYMBOL(bcmsdh_cfg_read);
 
 void
 bcmsdh_cfg_write(void *sdh, uint fnc_num, uint32 addr, uint8 data, int *err)
@@ -271,7 +381,7 @@ bcmsdh_cfg_write(void *sdh, uint fnc_num, uint32 addr, uint8 data, int *err)
 
 	BCMSDH_INFO(("%s:fun = %d, addr = 0x%x, uint8data = 0x%x\n", __FUNCTION__,
 	            fnc_num, addr, data));
-}
+} EXPORT_SYMBOL(bcmsdh_cfg_write);
 
 uint32
 bcmsdh_cfg_read_word(void *sdh, uint fnc_num, uint32 addr, int *err)
@@ -388,13 +498,14 @@ bcmsdhsdio_set_sbaddr_window(void *sdh, uint32 address, bool force_set)
 }
 
 uint32
-bcmsdh_reg_read(void *sdh, uint32 addr, uint size)
+bcmsdh_reg_read(void *sdh, uintptr addr, uint size)
 {
 	bcmsdh_info_t *bcmsdh = (bcmsdh_info_t *)sdh;
 	SDIOH_API_RC status;
 	uint32 word = 0;
 
-	BCMSDH_INFO(("%s:fun = 1, addr = 0x%x, ", __FUNCTION__, addr));
+	BCMSDH_INFO(("%s:fun = 1, addr = 0x%x, ",
+		__FUNCTION__, (unsigned int)addr));
 
 	if (!bcmsdh)
 		bcmsdh = l_bcmsdh;
@@ -431,19 +542,20 @@ bcmsdh_reg_read(void *sdh, uint32 addr, uint size)
 	}
 
 	/* otherwise, bad sdio access or invalid size */
-	BCMSDH_ERROR(("%s: error reading addr 0x%04x size %d\n", __FUNCTION__, addr, size));
+	BCMSDH_ERROR(("%s: error reading addr 0x%x size %d\n",
+		__FUNCTION__, (unsigned int)addr, size));
 	return 0xFFFFFFFF;
 }
 
 uint32
-bcmsdh_reg_write(void *sdh, uint32 addr, uint size, uint32 data)
+bcmsdh_reg_write(void *sdh, uintptr addr, uint size, uint32 data)
 {
 	bcmsdh_info_t *bcmsdh = (bcmsdh_info_t *)sdh;
 	SDIOH_API_RC status;
 	int err = 0;
 
 	BCMSDH_INFO(("%s:fun = 1, addr = 0x%x, uint%ddata = 0x%x\n",
-	             __FUNCTION__, addr, size*8, data));
+	             __FUNCTION__, (unsigned int)addr, size*8, data));
 
 	if (!bcmsdh)
 		bcmsdh = l_bcmsdh;
@@ -464,7 +576,7 @@ bcmsdh_reg_write(void *sdh, uint32 addr, uint size, uint32 data)
 		return 0;
 
 	BCMSDH_ERROR(("%s: error writing 0x%08x to addr 0x%04x size %d\n",
-	              __FUNCTION__, data, addr, size));
+	              __FUNCTION__, data, (unsigned int)addr, size));
 	return 0xFFFFFFFF;
 }
 
@@ -602,7 +714,6 @@ bcmsdh_waitlockfree(void *sdh)
 	return sdioh_waitlockfree(bcmsdh->sdioh);
 }
 
-
 int
 bcmsdh_query_device(void *sdh)
 {
@@ -640,7 +751,13 @@ void *bcmsdh_get_sdioh(bcmsdh_info_t *sdh)
 uint32
 bcmsdh_get_dstatus(void *sdh)
 {
+#ifdef BCMSPI
+	bcmsdh_info_t *p = (bcmsdh_info_t *)sdh;
+	sdioh_info_t *sd = (sdioh_info_t *)(p->sdioh);
+	return sdioh_get_dstatus(sd);
+#else
 	return 0;
+#endif /* BCMSPI */
 }
 uint32
 bcmsdh_cur_sbwad(void *sdh)
@@ -669,9 +786,25 @@ bcmsdh_force_sbwad_calc(void *sdh, bool force)
 void
 bcmsdh_chipinfo(void *sdh, uint32 chip, uint32 chiprev)
 {
+#ifdef BCMSPI
+	bcmsdh_info_t *p = (bcmsdh_info_t *)sdh;
+	sdioh_info_t *sd = (sdioh_info_t *)(p->sdioh);
+	sdioh_chipinfo(sd, chip, chiprev);
+#else
 	return;
+#endif /* BCMSPI */
 }
 
+#ifdef BCMSPI
+void
+bcmsdh_dwordmode(void *sdh, bool set)
+{
+	bcmsdh_info_t *p = (bcmsdh_info_t *)sdh;
+	sdioh_info_t *sd = (sdioh_info_t *)(p->sdioh);
+	sdioh_dwordmode(sd, set);
+	return;
+}
+#endif /* BCMSPI */
 
 int
 bcmsdh_sleep(void *sdh, bool enab)

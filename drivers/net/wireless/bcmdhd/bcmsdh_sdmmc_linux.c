@@ -1,7 +1,7 @@
 /*
  * BCMSDH Function Driver for the native SDIO/MMC driver in the Linux Kernel
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Proprietary,Open:>>
  *
- * $Id: bcmsdh_sdmmc_linux.c 528293 2015-01-21 23:18:59Z $
+ * $Id: bcmsdh_sdmmc_linux.c 644124 2016-06-17 07:59:34Z $
  */
 
 #include <typedefs.h>
@@ -259,9 +259,6 @@ static int bcmsdh_sdmmc_suspend(struct device *pdev)
 	}
 #endif
 
-#if defined(OOB_INTR_ONLY)
-	bcmsdh_oob_intr_set(sdioh->bcmsdh, FALSE);
-#endif 
 	smp_mb();
 
 	return 0;
@@ -278,9 +275,7 @@ static int bcmsdh_sdmmc_resume(struct device *pdev)
 
 	sdioh = sdio_get_drvdata(func);
 	dhd_mmc_suspend = FALSE;
-#if defined(OOB_INTR_ONLY)
 	bcmsdh_resume(sdioh->bcmsdh);
-#endif 
 
 	smp_mb();
 	return 0;

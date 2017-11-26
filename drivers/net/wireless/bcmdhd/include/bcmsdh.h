@@ -3,7 +3,7 @@
  *     export functions to client drivers
  *     abstract OS and BUS specific details of SDIO
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -26,7 +26,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: bcmsdh.h 572557 2015-07-20 07:12:29Z $
+ * $Id: bcmsdh.h 671244 2016-11-21 08:36:36Z $
  */
 
 /**
@@ -51,6 +51,15 @@ extern const uint bcmsdh_msglevel;
 /* forward declarations */
 typedef struct bcmsdh_info bcmsdh_info_t;
 typedef void (*bcmsdh_cb_fn_t)(void *);
+
+
+#if defined(BT_OVER_SDIO)
+typedef enum {
+	NO_HANG_STATE		= 0,
+	HANG_START_STATE		= 1,
+	HANG_RECOVERY_STATE	= 2
+} dhd_hang_state_t;
+#endif
 
 extern bcmsdh_info_t *bcmsdh_attach(osl_t *osh, void *sdioh, ulong *regsva);
 /**
@@ -121,8 +130,8 @@ extern int bcmsdh_cis_read(void *sdh, uint func, uint8 *cis, uint length);
  *   size: register width in bytes (2 or 4)
  *   data: data for register write
  */
-extern uint32 bcmsdh_reg_read(void *sdh, uint32 addr, uint size);
-extern uint32 bcmsdh_reg_write(void *sdh, uint32 addr, uint size, uint32 data);
+extern uint32 bcmsdh_reg_read(void *sdh, uintptr addr, uint size);
+extern uint32 bcmsdh_reg_write(void *sdh, uintptr addr, uint size, uint32 data);
 
 /* set sb address window */
 extern int bcmsdhsdio_set_sbaddr_window(void *sdh, uint32 address, bool force_set);
@@ -222,12 +231,12 @@ extern void bcmsdh_device_remove(void * sdh);
 extern int bcmsdh_reg_sdio_notify(void* semaphore);
 extern void bcmsdh_unreg_sdio_notify(void);
 
-#if defined(OOB_INTR_ONLY)
+#if defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID)
 extern int bcmsdh_oob_intr_register(bcmsdh_info_t *bcmsdh, bcmsdh_cb_fn_t oob_irq_handler,
 	void* oob_irq_handler_context);
 extern void bcmsdh_oob_intr_unregister(bcmsdh_info_t *sdh);
 extern void bcmsdh_oob_intr_set(bcmsdh_info_t *sdh, bool enable);
-#endif 
+#endif /* defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) */
 extern void bcmsdh_dev_pm_stay_awake(bcmsdh_info_t *sdh);
 extern void bcmsdh_dev_relax(bcmsdh_info_t *sdh);
 extern bool bcmsdh_dev_pm_enabled(bcmsdh_info_t *sdh);
@@ -247,6 +256,9 @@ extern void bcmsdh_force_sbwad_calc(void *sdh, bool force);
 /* Function to pass chipid and rev to lower layers for controlling pr's */
 extern void bcmsdh_chipinfo(void *sdh, uint32 chip, uint32 chiprev);
 
+#ifdef BCMSPI
+extern void bcmsdh_dwordmode(void *sdh, bool set);
+#endif /* BCMSPI */
 
 extern int bcmsdh_sleep(void *sdh, bool enab);
 

@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver - Dongle Host Driver (DHD) related
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wl_cfg_btcoex.c 637937 2016-05-16 08:35:04Z $
+ * $Id: wl_cfg_btcoex.c 656598 2016-08-29 08:30:40Z $
  */
 
 #include <net/rtnetlink.h>
@@ -306,7 +306,14 @@ static void wl_cfg80211_bt_handler(struct work_struct *work)
 {
 	struct btcoex_info *btcx_inf;
 
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif
 	btcx_inf = container_of(work, struct btcoex_info, work);
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 	if (btcx_inf->timer_on) {
 		btcx_inf->timer_on = 0;
@@ -440,11 +447,20 @@ int wl_cfg80211_set_btcoex_dhcp(struct net_device *dev, dhd_pub_t *dhd, char *co
 #ifdef PKT_FILTER_SUPPORT
 		dhd->dhcp_in_progress = 1;
 
+#if defined(WL_VIRTUAL_APSTA) && defined(APSTA_BLOCK_ARP_DURING_DHCP)
+		if ((dhd->op_mode & DHD_FLAG_CONCURR_STA_HOSTAP_MODE) ==
+			DHD_FLAG_CONCURR_STA_HOSTAP_MODE) {
+			/* Block ARP frames while DHCP of STA interface is in
+			 * progress in case of STA/SoftAP concurrent mode
+			 */
+			wl_cfg80211_block_arp(dev, TRUE);
+		} else
+#endif /* WL_VIRTUAL_APSTA && APSTA_BLOCK_ARP_DURING_DHCP */
 		if (dhd->early_suspended) {
 			WL_TRACE_HW4(("DHCP in progressing , disable packet filter!!!\n"));
 			dhd_enable_packet_filter(0, dhd);
 		}
-#endif
+#endif /* PKT_FILTER_SUPPORT */
 
 		/* Retrieve and saved orig regs value */
 		if ((saved_status == FALSE) &&
@@ -492,8 +508,15 @@ int wl_cfg80211_set_btcoex_dhcp(struct net_device *dev, dhd_pub_t *dhd, char *co
 		dhd->dhcp_in_progress = 0;
 		WL_TRACE_HW4(("DHCP is complete \n"));
 
-		/* Enable packet filtering */
+#if defined(WL_VIRTUAL_APSTA) && defined(APSTA_BLOCK_ARP_DURING_DHCP)
+		if ((dhd->op_mode & DHD_FLAG_CONCURR_STA_HOSTAP_MODE) ==
+			DHD_FLAG_CONCURR_STA_HOSTAP_MODE) {
+			/* Unblock ARP frames */
+			wl_cfg80211_block_arp(dev, FALSE);
+		} else
+#endif /* WL_VIRTUAL_APSTA && APSTA_BLOCK_ARP_DURING_DHCP */
 		if (dhd->early_suspended) {
+			/* Enable packet filtering */
 			WL_TRACE_HW4(("DHCP is complete , enable packet filter!!!\n"));
 			dhd_enable_packet_filter(1, dhd);
 		}

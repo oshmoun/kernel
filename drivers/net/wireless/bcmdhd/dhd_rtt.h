@@ -1,7 +1,7 @@
 /*
  * Broadcom Dongle Host Driver (DHD), RTT
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,18 +21,24 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_rtt.h 578013 2015-08-10 05:56:41Z $
+ *
+ * <<Broadcom-WL-IPTag/Open:>>
+ *
+ * $Id$
  */
 #ifndef __DHD_RTT_H__
 #define __DHD_RTT_H__
 
 #include "dngl_stats.h"
 
-#define RTT_MAX_TARGET_CNT	50
-#define RTT_MAX_FRAME_CNT	25
-#define RTT_MAX_RETRY_CNT	10
-#define DEFAULT_FTM_CNT		6
-#define DEFAULT_RETRY_CNT	6
+#define RTT_MAX_TARGET_CNT 50
+#define RTT_MAX_FRAME_CNT 25
+#define RTT_MAX_RETRY_CNT 10
+#define DEFAULT_FTM_CNT 6
+#define DEFAULT_RETRY_CNT 6
+#define DEFAULT_FTM_FREQ 5180
+#define DEFAULT_FTM_CNTR_FREQ0 5210
+
 #define TARGET_INFO_SIZE(count) (sizeof(rtt_target_info_t) * count)
 
 #define TARGET_TYPE(target) (target->type)
@@ -55,22 +61,20 @@
 #define WL_RATE_36M	72	/* in 500kbps units */
 #define WL_RATE_48M	96	/* in 500kbps units */
 #define WL_RATE_54M	108	/* in 500kbps units */
-
+#define GET_RTTSTATE(dhd) ((rtt_status_info_t *)dhd->rtt_state)
 
 enum rtt_role {
 	RTT_INITIATOR = 0,
 	RTT_TARGET = 1
 };
-
 enum rtt_status {
 	RTT_STOPPED = 0,
 	RTT_STARTED = 1,
 	RTT_ENABLED = 2
 };
-
 typedef int64_t wifi_timestamp; /* In microseconds (us) */
 typedef int64_t wifi_timespan;
-typedef int32 wifi_rssi;
+typedef int32 wifi_rssi_rtt;
 
 typedef enum {
 	RTT_INVALID,
@@ -88,19 +92,19 @@ typedef enum {
 } rtt_peer_type_t;
 
 typedef enum rtt_reason {
-	RTT_REASON_SUCCESS,
-	RTT_REASON_FAILURE,
-	RTT_REASON_FAIL_NO_RSP,
-	RTT_REASON_FAIL_INVALID_TS, /* Invalid timestamp */
-	RTT_REASON_FAIL_PROTOCOL, /* 11mc protocol failed */
-	RTT_REASON_FAIL_REJECTED,
-	RTT_REASON_FAIL_NOT_SCHEDULED_YET,
-	RTT_REASON_FAIL_SCHEDULE, /* schedule failed */
-	RTT_REASON_FAIL_TM_TIMEOUT,
-	RTT_REASON_FAIL_AP_ON_DIFF_CHANNEL,
-	RTT_REASON_FAIL_NO_CAPABILITY,
-	RTT_REASON_FAIL_BUSY_TRY_LATER,
-	RTT_REASON_ABORTED
+    RTT_REASON_SUCCESS,
+    RTT_REASON_FAILURE,
+    RTT_REASON_FAIL_NO_RSP,
+    RTT_REASON_FAIL_INVALID_TS, /* Invalid timestamp */
+    RTT_REASON_FAIL_PROTOCOL, /* 11mc protocol failed */
+    RTT_REASON_FAIL_REJECTED,
+    RTT_REASON_FAIL_NOT_SCHEDULED_YET,
+    RTT_REASON_FAIL_SCHEDULE, /* schedule failed */
+    RTT_REASON_FAIL_TM_TIMEOUT,
+    RTT_REASON_FAIL_AP_ON_DIFF_CHANNEL,
+    RTT_REASON_FAIL_NO_CAPABILITY,
+    RTT_REASON_FAIL_BUSY_TRY_LATER,
+    RTT_REASON_ABORTED
 } rtt_reason_t;
 
 enum {
@@ -122,6 +126,7 @@ enum {
 	RTT_PREAMBLE_VHT = BIT(2)
 };
 
+
 enum {
 	RTT_BW_5 = BIT(0),
 	RTT_BW_10 = BIT(1),
@@ -130,14 +135,6 @@ enum {
 	RTT_BW_80 = BIT(4),
 	RTT_BW_160 = BIT(5)
 };
-
-enum rtt_rate_bw {
-	RTT_RATE_20M,
-	RTT_RATE_40M,
-	RTT_RATE_80M,
-	RTT_RATE_160M
-};
-
 #define FTM_MAX_NUM_BURST_EXP	14
 #define HAS_11MC_CAP(cap) (cap & RTT_CAP_FTM_WAY)
 #define HAS_ONEWAY_CAP(cap) (cap & RTT_CAP_ONE_WAY)
@@ -151,7 +148,7 @@ typedef struct wifi_channel_info {
 } wifi_channel_info_t;
 
 typedef struct wifi_rate {
-	uint32 preamble		:3; /* 0: OFDM, 1: CCK, 2 : HT, 3: VHT, 4..7 reserved */
+	uint32 preamble :3; /* 0: OFDM, 1: CCK, 2 : HT, 3: VHT, 4..7 reserved */
 	uint32 nss		:2; /* 1 : 1x1, 2: 2x2, 3: 3x3, 4: 4x4 */
 	uint32 bw		:3; /* 0: 20Mhz, 1: 40Mhz, 2: 80Mhz, 3: 160Mhz */
 	/* OFDM/CCK rate code would be as per IEEE std in the unit of 0.5 mb
@@ -197,7 +194,7 @@ typedef struct rtt_target_info {
 	* initiator will request that the responder send
 	* in a single frame
 	*/
-	uint32 num_frames_per_burst;
+    uint32 num_frames_per_burst;
 	/* num of frames in each RTT burst
 	 * for single side, measurement result num = frame number
 	 * for 2 side RTT, measurement result num  = frame number - 1
@@ -222,6 +219,34 @@ typedef struct rtt_target_info {
 	uint8  bw;  /* 5, 10, 20, 40, 80, 160 */
 } rtt_target_info_t;
 
+typedef struct rtt_config_params {
+	int8 rtt_target_cnt;
+	rtt_target_info_t *target_info;
+} rtt_config_params_t;
+
+typedef struct rtt_status_info {
+    dhd_pub_t *dhd;
+    int8 status;   /* current status for the current entry */
+    int8 txchain; /* current device tx chain */
+    int8 mpc; /* indicate we change mpc mode */
+    int pm; /* to save current value of pm */
+    int8 pm_restore; /* flag to reset the old value of pm */
+    int8 cur_idx; /* current entry to do RTT */
+    bool all_cancel; /* cancel all request once we got the cancel requet */
+    uint32 flags; /* indicate whether device is configured as initiator or target */
+    struct capability {
+		int32 proto     :8;
+		int32 feature   :8;
+		int32 preamble  :8;
+		int32 bw        :8;
+	} rtt_capa; /* rtt capability */
+    struct mutex rtt_mutex;
+    rtt_config_params_t rtt_config;
+    struct work_struct work;
+    struct list_head noti_fn_list;
+    struct list_head rtt_results_cache; /* store results for RTT */
+} rtt_status_info_t;
+
 typedef struct rtt_report {
 	struct ether_addr addr;
 	unsigned int burst_num; /* # of burst inside a multi-burst request */
@@ -232,8 +257,8 @@ typedef struct rtt_report {
 	/* in s, 11mc only, only for RTT_REASON_FAIL_BUSY_TRY_LATER, 1- 31s */
 	uint8 retry_after_duration;
 	rtt_type_t type; /* rtt type */
-	wifi_rssi  rssi; /* average rssi in 0.5 dB steps e.g. 143 implies -71.5 dB */
-	wifi_rssi  rssi_spread; /* rssi spread in 0.5 db steps e.g. 5 implies 2.5 spread */
+	wifi_rssi_rtt  rssi; /* average rssi in 0.5 dB steps e.g. 143 implies -71.5 dB */
+	wifi_rssi_rtt  rssi_spread; /* rssi spread in 0.5 db steps e.g. 5 implies 2.5 spread */
 	/*
 	* 1-sided RTT: TX rate of RTT frame.
 	* 2-sided RTT: TX rate of initiator's Ack in response to FTM frame.
@@ -256,7 +281,6 @@ typedef struct rtt_report {
 	bcm_tlv_t *LCI; /* LCI Report */
 	bcm_tlv_t *LCR; /* Location Civic Report */
 } rtt_report_t;
-
 #define RTT_REPORT_SIZE (sizeof(rtt_report_t))
 
 /* rtt_results_header to maintain rtt result list per mac address */
@@ -285,14 +309,14 @@ typedef struct rtt_capabilities {
 	uint8 bw_support;               /* bit mask indicate what BW is supported */
 } rtt_capabilities_t;
 
-typedef struct rtt_config_params {
-	int8 rtt_target_cnt;
-	rtt_target_info_t *target_info;
-} rtt_config_params_t;
+
+/* RTT responder information */
+typedef struct wifi_rtt_responder {
+	wifi_channel_info channel;   /* channel of responder */
+	uint8 preamble;             /* preamble supported by responder */
+} wifi_rtt_responder_t;
 
 typedef void (*dhd_rtt_compl_noti_fn)(void *ctx, void *rtt_data);
-
-#ifdef RTT_SUPPORT
 /* Linux wrapper to call common dhd_rtt_set_cfg */
 int
 dhd_dev_rtt_set_cfg(struct net_device *dev, void *buf);
@@ -310,6 +334,16 @@ dhd_dev_rtt_unregister_noti_callback(struct net_device *dev, dhd_rtt_compl_noti_
 int
 dhd_dev_rtt_capability(struct net_device *dev, rtt_capabilities_t *capa);
 
+#ifdef WL_CFG80211
+int
+dhd_dev_rtt_avail_channel(struct net_device *dev, wifi_channel_info *channel_info);
+#endif /* WL_CFG80211 */
+
+int
+dhd_dev_rtt_enable_responder(struct net_device *dev, wifi_channel_info *channel_info);
+
+int
+dhd_dev_rtt_cancel_responder(struct net_device *dev);
 /* export to upper layer */
 chanspec_t
 dhd_rtt_convert_to_chspec(wifi_channel_info_t channel);
@@ -337,9 +371,17 @@ int
 dhd_rtt_capability(dhd_pub_t *dhd, rtt_capabilities_t *capa);
 
 int
+dhd_rtt_avail_channel(dhd_pub_t *dhd, wifi_channel_info *channel_info);
+
+int
+dhd_rtt_enable_responder(dhd_pub_t *dhd, wifi_channel_info *channel_info);
+
+int
+dhd_rtt_cancel_responder(dhd_pub_t *dhd);
+
+int
 dhd_rtt_init(dhd_pub_t *dhd);
 
 int
 dhd_rtt_deinit(dhd_pub_t *dhd);
-#endif /* RTT_SUPPORT */
 #endif /* __DHD_RTT_H__ */
