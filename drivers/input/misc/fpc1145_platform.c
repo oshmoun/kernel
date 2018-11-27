@@ -482,6 +482,30 @@ static int fpc1145_get_regulators(struct fpc1145_data *fpc1145)
 	return 0;
 }
 
+#define MSM_TLMM_GPIO14_BASE 0x0390E000
+#define MSM_TLMM_SIZE 0x72000
+
+static void cei_fp_module_detect(void)
+{
+	int value;
+	void __iomem *cfg_reg = NULL;
+	uint32_t cei_current_dir;
+
+	pr_err("fpc module detect\n");
+
+	cfg_reg = ioremap(MSM_TLMM_GPIO14_BASE, MSM_TLMM_SIZE);
+	writel_relaxed(0, cfg_reg);
+	msleep(100);
+	cei_current_dir = readl_relaxed(cfg_reg + 0x4);
+	value = cei_current_dir & 0x1;
+
+	if (value) {
+		pr_err("fpc module is fpc1035");
+		return;
+	}
+	pr_err("fpc module is et516 or null");
+}
+
 static int fpc1145_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -496,6 +520,9 @@ static int fpc1145_probe(struct platform_device *pdev)
 		rc = -ENOMEM;
 		goto exit;
 	}
+
+
+	cei_fp_module_detect();
 
 	fpc1145->dev = dev;
 	platform_set_drvdata(pdev, fpc1145);
