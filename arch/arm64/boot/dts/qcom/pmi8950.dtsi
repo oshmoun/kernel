@@ -10,9 +10,9 @@
  * GNU General Public License for more details.
  */
 
+#include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/msm/power-on.h>
 #include <dt-bindings/spmi/spmi.h>
-#include <dt-bindings/interrupt-controller/arm-gic.h>
 
 &spmi_bus {
 	qcom,pmi8950@2 {

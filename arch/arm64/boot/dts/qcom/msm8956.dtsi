@@ -12,14 +12,8 @@
  */
 
 #include "skeleton64.dtsi"
-//#include <dt-bindings/clock/msm-clocks-8976.h>
-#include <dt-bindings/clock/qcom,gcc-msm8976.h>
-#include <dt-bindings/clock/qcom,cpu-8976.h>
-#include <dt-bindings/clock/qcom,rpmcc.h>
-#include <dt-bindings/clock/mdss-pll-clk.h>
-#include <dt-bindings/clock/qcom,audio-ext-clk.h>
+#include <dt-bindings/clock/msm-clocks-8976.h>
 #include <dt-bindings/regulator/qcom,rpm-smd-regulator.h>
-#include <dt-bindings/spmi/spmi.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 
 / {
@@ -55,7 +49,7 @@
 
 	chosen {
 		stdout-path = "serial0";
-		bootargs = "sched_enable_hmp=1";
+		bootargs = "sched_enable_hmp=1 restore_msm_uart=0x01014000";
 	};
 
 	psci {
@@ -528,46 +522,52 @@
 		};
 	};
 
-	clock_rpmcc: qcom,rpmcc {
-		compatible = "qcom,rpmcc-msm8976", "qcom,rpmcc";
-		#clock-cells = <1>;
-		status = "ok";
-	};
-
-	clock_gcc: clock-controller@1800000 {
-		compatible = "qcom,gcc-8976", "syscon";
+	clock_gcc: qcom,gcc@1800000 {
+		compatible = "qcom,gcc-8976";
 		reg = <0x1800000 0x80000>;
+		reg-names = "cc_base";
 		vdd_dig-supply = <&pm8950_s2_level>;
 		#clock-cells = <1>;
 		#reset-cells = <1>;
-		status = "ok";
-	};
-
-	clock_gcc_vote: vote-clock-controller@1800000 {
-		compatible = "qcom,gcc-voters-8976";
-		reg = <0x1800000 0x80000>;
-		#clock-cells = <1>;
-		status = "ok";
-	};
-
-	clock_gcc_mdss: mdss-clock-controller@1800000 {
-		compatible = "qcom,gcc-mdss-8976";
-		reg = <0x1800000 0x80000>;
-		#clock-cells = <1>;
-		status = "ok";
-	};
-
-	clock_gcc_gfx: gfx3d-clock-controller@1800000 {
-                compatible = "qcom,gcc-gfx-8976";
-                reg = <0x1800000 0x80000>;
-		vdd_dig_gfx-supply = <&pm8950_s2_level>;
-		vdd_gfx-supply = <&gfx_vreg_corner>;
-		#clock-cells = <1>;
-		status = "ok";
 	};
 
 	clock_debug: qcom,cc-debug@1874000 {
 		compatible = "qcom,cc-debug-8976";
+		clocks = <&clock_cpu clk_cpu_debug_pri_mux>;
+		clock-names = "debug_cpu_clk";
+		#clock-cells = <1>;
+	};
+
+	clock_gcc_gfx: qcom,gcc-gfx@1800000 {
+		compatible = "qcom,gcc-gfx-8976";
+		reg = <0x1800000 0x80000>;
+		reg-names = "cc_base";
+		vdd_gfx-supply = <&gfx_vreg_corner>;
+		gpu_handle = <&msm_gpu>;
+		qcom,gfxfreq-corner =
+			<         0   0 >,
+			< 133333333   1 >,  /* Min SVS   */
+			< 200000000   2 >,  /* Low SVS   */
+			< 266666667   3 >,  /* SVS Minus */
+			< 300000000   4 >,  /* SVS       */
+			< 366670000   5 >,  /* SVS Plus  */
+			< 432000000   6 >,  /* NOM       */
+			< 480000000   7 >,  /* Turbo     */
+			< 550000000   8 >,  /* Super Turbo */
+			< 600000000   9 >;  /* Super Turbo */
+		#clock-cells = <1>;
+	};
+
+	clock_gcc_mdss: qcom,gcc-mdss@1800000 {
+		compatible = "qcom,gcc-mdss-8976";
+		reg = <0x1800000 0x80000>;
+		reg-names = "cc_base";
+		clocks = <&mdss_dsi0_pll clk_dsi_pll0_pixel_clk_src>,
+			 <&mdss_dsi0_pll clk_dsi_pll0_byte_clk_src>,
+			 <&mdss_dsi1_pll clk_dsi_pll1_pixel_clk_src>,
+			 <&mdss_dsi1_pll clk_dsi_pll1_byte_clk_src>;
+		clock-names = "pclk0_src", "byte0_src", "pclk1_src",
+				 "byte1_src";
 		#clock-cells = <1>;
 	};
 
@@ -583,15 +583,11 @@
 			<0xb111050  0x08>,
 			<0xb011050  0x08>,
 			<0xb1d1050  0x08>,
-			<0x00a412c  0x08>,
-			<0x0b111200 0x100>,
-		        <0x0b011200 0x100>,
-			<0x0b1d4000 0x100>;
-		reg-names = "rcgwr-c1-base", "rcgwr-c0-base",
-			    "c1-pll", "c0-pll", "cci-pll",
-			    "c1-mux", "c0-mux", "cci-mux",
-			    "efuse", "spm_c1_base",
-			    "spm_c0_base", "spm_cci_base";
+			<0x00a412c  0x08>;
+		reg-names = "rcgwr-c0-base", "rcgwr-c1-base",
+			    "c0-pll", "c1-pll", "cci-pll",
+			    "c0-mux", "c1-mux", "cci-mux",
+			    "efuse";
 		/* RCGwR settings */
 		qcom,num-clusters = <2>;
 		qcom,lmh-sid-c0  = < 0x30 0x077706db>,
@@ -625,25 +621,26 @@
 		vdd_a72-supply = <&apc1_vreg_corner>;
 		vdd_a53-supply = <&apc0_vreg_corner>;
 		vdd_cci-supply = <&apc0_vreg_corner>;
-		clocks = <&clock_rpmcc RPM_XO_A_CLK_SRC>,
-			 <&clock_gcc GPLL4_CLK_SRC>,
-			 <&clock_gcc GPLL0_AO_CLK_SRC>;
-		clock-names = "cxo_a", "aux_clk_2", "aux_clk_3";
+
+		clocks = <&clock_gcc clk_xo_a_clk_src>,
+			 <&clock_gcc clk_gpll4_clk_src>,
+			 <&clock_gcc clk_gpll0_ao_clk_src>;
+		clock-names = "xo_a", "aux_clk_2", "aux_clk_3";
 		qcom,speed0-bin-v0-c0 =
 			<          0 0>,
 			<  400000000 1>,
-			<  600000000 2>,
-			<  800000000 3>,
+			<  691200000 2>,
+			<  806400000 3>,
 			< 1017600000 4>,
-			< 1200000000 5>,
+			< 1190400000 5>,
 			< 1305600000 6>,
 			< 1382400000 7>,
 			< 1401600000 8>;
 		qcom,speed0-bin-v0-c1 =
 			<          0 0>,
 			<  400000000 1>,
-			<  800000000 2>,
-			< 1200000000 3>,
+			<  883200000 2>,
+			< 1190400000 3>,
 			< 1382400000 4>,
 			< 1612800000 5>,
 			< 1747200000 6>;
@@ -657,10 +654,10 @@
 		qcom,speed1-bin-v0-c0 =
 			<          0 0>,
 			<  400000000 1>,
-			<  600000000 2>,
-			<  800000000 3>,
+			<  691200000 2>,
+			<  806400000 3>,
 			< 1017600000 4>,
-			< 1200000000 5>,
+			< 1190400000 5>,
 			< 1305600000 6>,
 			< 1382400000 7>,
 			< 1401600000 8>,
@@ -668,8 +665,8 @@
 		qcom,speed1-bin-v0-c1 =
 			<          0 0>,
 			<  400000000 1>,
-			<  800000000 2>,
-			< 1200000000 3>,
+			<  883200000 2>,
+			< 1190400000 3>,
 			< 1382400000 4>,
 			< 1612800000 5>,
 			< 1747200000 6>,
@@ -683,12 +680,20 @@
 			<  614400000 6>;
 		#clock-cells = <1>;
 		ranges;
+		qcom,spm@0 {
+			compatible = "qcom,cpu-spm-8976";
+			reg = <0x0b111200 0x100>,
+			      <0x0b011200 0x100>,
+			      <0x0b1d4000 0x100>;
+			reg-names = "spm_c0_base", "spm_c1_base",
+				    "spm_cci_base";
+		};
 	};
 
 	cci_cache: qcom,cci {
 		compatible = "devfreq-simple-dev";
 		clock-names = "devfreq_clk";
-		clocks = <&clock_cpu P_CCI_CLK>;
+		clocks = <&clock_cpu clk_cci_clk>;
 		governor = "cpufreq";
 		freq-tbl-khz =
 			<  307200 >,
@@ -782,10 +787,10 @@
 		qcom,cpulist = <&CPU0 &CPU1 &CPU2 &CPU3>;
 		qcom,target-dev = <&memlat_cpu0>;
 		qcom,core-dev-table =
-			<  600000   805 >,
-			<  800000  4101 >,
+			<  691200   805 >,
+			<  806400  4101 >,
 			< 1017600  5712 >,
-			< 1200000  6152 >,
+			< 1190400  6152 >,
 			< 1440000  7104 >;
 	};
 
@@ -794,8 +799,8 @@
 		qcom,cpulist = <&CPU4 &CPU5>;
 		qcom,target-dev = <&memlat_cpu4>;
 		qcom,core-dev-table =
-			<  800000   805 >,
-			< 1200000  4101 >,
+			<  883200   805 >,
+			< 1190400  4101 >,
 			< 1382400  5712 >,
 			< 1612800  6152 >,
 			< 1804800  7104 >;
@@ -805,14 +810,14 @@
 		cpubw-cpufreq {
 			target-dev = <&cpubw>;
 			cpu-to-dev-map-0 =
-				<  600000   805 >,	/* SVS   */
-				<  800000  4101 >,	/* SVS+  */
+				<  691200   805 >,	/* SVS   */
+				<  806400  4101 >,	/* SVS+  */
 				< 1017600  5712 >,	/* NOM   */
-				< 1200000  6152 >,	/* TURBO */
+				< 1190400  6152 >,	/* TURBO */
 				< 1440000  7104 >;
 			cpu-to-dev-map-4 =
-				<  800000   805 >,	/* SVS   */
-				< 1200000  4101 >,	/* SVS+  */
+				<  883200   805 >,	/* SVS   */
+				< 1190400  4101 >,	/* SVS+  */
 				< 1382400  5712 >,	/* NOM   */
 				< 1612800  6152 >,	/* TURBO */
 				< 1804800  7104 >;
@@ -821,11 +826,11 @@
 		mincpubw-cpufreq {
 			target-dev = <&mincpubw>;
 			cpu-to-dev-map-0 =
-				<  600000 2929 >,
+				<  691200 2929 >,
 				< 1017600 2929 >,
 				< 1440000 4101 >;
 			cpu-to-dev-map-4 =
-				<  800000 2929 >,
+				<  883200 2929 >,
 				< 1382400 2929 >,
 				< 1747200 4101 >;
 		};
@@ -833,14 +838,14 @@
 		cci-cpufreq {
 			target-dev = <&cci_cache>;
 			cpu-to-dev-map-0 =
-				<  600000  307200 >,
-				<  800000  403200 >,
+				<  691200  307200 >,
+				<  806400  403200 >,
 				< 1017600  441600 >,
-				< 1200000  556800 >,
+				< 1190400  556800 >,
 				< 1440000  614400 >;
 			cpu-to-dev-map-4 =
-				<  800000 307200 >,
-				< 1200000 403200 >,
+				<  883200 307200 >,
+				< 1190400 403200 >,
 				< 1382400 441600 >,
 				< 1612800 556800 >,
 				< 1804800 614400 >;
@@ -849,30 +854,34 @@
 
 	qcom,msm-cpufreq {
 		compatible = "qcom,msm-cpufreq";
-		clock-names = "l2_clk", "cpu0_clk", "cpu4_clk", "cpu5_clk";
-		clocks = <&clock_cpu P_CCI_CLK>,
-			 <&clock_cpu P_A53_CLK>,
-			 <&clock_cpu P_A72_CLK>,
-			 <&clock_cpu P_A72_CLK>;
+		clock-names = "l2_clk", "cpu0_clk", "cpu1_clk", "cpu2_clk",
+			      "cpu3_clk", "cpu4_clk", "cpu5_clk";
+		clocks = <&clock_cpu clk_cci_clk>,
+		  	 <&clock_cpu clk_a53_clk>,
+		  	 <&clock_cpu clk_a53_clk>,
+		  	 <&clock_cpu clk_a53_clk>,
+		  	 <&clock_cpu clk_a53_clk>,
+		  	 <&clock_cpu clk_a72_clk>,
+		  	 <&clock_cpu clk_a72_clk>;
 		qcom,governor-per-policy;
 		qcom,cpufreq-table-0 =
 			<  400000 >,
-			<  600000 >,
-			<  800000 >,
+			<  691200 >,
+			<  806400 >,
 			< 1017600 >,
-			< 1200000 >,
+			< 1190400 >,
 			< 1305600 >,
 			< 1382400 >,
 			< 1401600 >,
 			< 1440000 >;
 		qcom,cpufreq-table-4 =
 			<  400000 >,
-			<  800000 >,
+			<  883200 >,
 			<  940800 >,
 			<  998400 >,
 			< 1056000 >,
 			< 1113600 >,
-			< 1200000 >,
+			< 1190400 >,
 			< 1248000 >,
 			< 1305600 >,
 			< 1382400 >,
@@ -1326,10 +1335,10 @@
 		qcom,enable-ice-clk;
 		clock-names = "ice_core_clk_src", "ice_core_clk",
 				"bus_clk", "iface_clk";
-		clocks = <&clock_gcc SDCC1_ICE_CORE_CLK_SRC>,
-			 <&clock_gcc GCC_SDCC1_ICE_CORE_CLK>,
-			 <&clock_gcc GCC_SDCC1_APPS_CLK>,
-			 <&clock_gcc GCC_SDCC1_AHB_CLK>;
+		clocks = <&clock_gcc clk_sdcc1_ice_core_clk_src>,
+			 <&clock_gcc clk_gcc_sdcc1_ice_core_clk>,
+			 <&clock_gcc clk_gcc_sdcc1_apps_clk>,
+			 <&clock_gcc clk_gcc_sdcc1_ahb_clk>;
 		qcom,op-freq-hz = <200000000>, <0>, <0>, <0>;
 		qcom,msm-bus,name = "sdcc_ice_noc";
 		qcom,msm-bus,num-cases = <2>;
@@ -1371,9 +1380,9 @@
 		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
 			100000000 200000000 400000000 4294967295>;
 
-		clocks = <&clock_gcc GCC_SDCC1_AHB_CLK>,
-			 <&clock_gcc GCC_SDCC1_APPS_CLK>,
-			 <&clock_gcc GCC_SDCC1_ICE_CORE_CLK>;
+		clocks = <&clock_gcc clk_gcc_sdcc1_ahb_clk>,
+			 <&clock_gcc clk_gcc_sdcc1_apps_clk>,
+			 <&clock_gcc clk_gcc_sdcc1_ice_core_clk>;
 		clock-names = "iface_clk", "core_clk", "ice_core_clk";
 
 		qcom,clk-rates = <400000 25000000 50000000 100000000
@@ -1420,8 +1429,8 @@
 		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
 						100000000 200000000 4294967295>;
 
-		clocks = <&clock_gcc GCC_SDCC2_AHB_CLK>,
-			 <&clock_gcc GCC_SDCC2_APPS_CLK>;
+		clocks = <&clock_gcc clk_gcc_sdcc2_ahb_clk>,
+			 <&clock_gcc clk_gcc_sdcc2_apps_clk>;
 		clock-names = "iface_clk", "core_clk";
 
 		qcom,clk-rates = <400000 25000000 50000000 100000000 200000000>;
@@ -1455,8 +1464,8 @@
 		qcom,devfreq,freq-table = <20000000 200000000>;
 
 		clock-names = "iface_clk", "core_clk";
-		clocks = <&clock_gcc GCC_SDCC3_AHB_CLK>,
-			<&clock_gcc GCC_SDCC3_APPS_CLK>;
+		clocks = <&clock_gcc clk_gcc_sdcc3_ahb_clk>,
+			<&clock_gcc clk_gcc_sdcc3_apps_clk>;
 
 		qcom,core_3_0v_support;
 		qcom,nonremovable;
@@ -1502,8 +1511,8 @@
 		reg = <0x78af000 0x200>;
 		interrupts = <0 107 0>;
 		status = "disabled";
-		clocks = <&clock_gcc GCC_BLSP1_UART1_APPS_CLK>,
-		       <&clock_gcc GCC_BLSP1_AHB_CLK>;
+		clocks = <&clock_gcc clk_gcc_blsp1_uart1_apps_clk>,
+		       <&clock_gcc clk_gcc_blsp1_ahb_clk>;
 		clock-names = "core_clk", "iface_clk";
 	};
 
@@ -1530,8 +1539,8 @@
 		qcom,bam-rx-ep-pipe-index = <3>;
 		qcom,master-id = <86>;
 		clock-names = "core_clk", "iface_clk";
-		clocks = <&clock_gcc GCC_BLSP1_UART2_APPS_CLK>,
-		    <&clock_gcc GCC_BLSP1_AHB_CLK>;
+		clocks = <&clock_gcc clk_gcc_blsp1_uart2_apps_clk>,
+		    <&clock_gcc clk_gcc_blsp1_ahb_clk>;
 		pinctrl-names = "sleep", "default";
 		pinctrl-0 = <&blsp1_uart2_sleep>;
 		pinctrl-1 = <&blsp1_uart2_active>;
@@ -1571,8 +1580,8 @@
 		qcom,clk-freq-out = <400000>;
 		qcom,clk-freq-in  = <19200000>;
 		clock-names = "iface_clk", "core_clk";
-		clocks = <&clock_gcc GCC_BLSP1_AHB_CLK>,
-		  <&clock_gcc GCC_BLSP1_QUP2_I2C_APPS_CLK>;
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+		  <&clock_gcc clk_gcc_blsp1_qup2_i2c_apps_clk>;
 		pinctrl-names = "i2c_active", "i2c_sleep";
 		pinctrl-0 = <&i2c_2_active>;
 		pinctrl-1 = <&i2c_2_sleep>;
@@ -1595,8 +1604,8 @@
 		qcom,clk-freq-out = <400000>;
 		qcom,clk-freq-in  = <19200000>;
 		clock-names = "iface_clk", "core_clk";
-		clocks = <&clock_gcc GCC_BLSP1_AHB_CLK>,
-			<&clock_gcc GCC_BLSP1_QUP4_I2C_APPS_CLK>;
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp1_qup4_i2c_apps_clk>;
 		pinctrl-names = "i2c_active", "i2c_sleep";
 		pinctrl-0 = <&i2c_4_active>;
 		pinctrl-1 = <&i2c_4_sleep>;
@@ -1619,8 +1628,8 @@
 		qcom,clk-freq-out = <400000>;
 		qcom,clk-freq-in  = <19200000>;
 		clock-names = "iface_clk", "core_clk";
-		clocks = <&clock_gcc GCC_BLSP2_AHB_CLK>,
-			<&clock_gcc GCC_BLSP2_QUP2_I2C_APPS_CLK>;
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp2_qup2_i2c_apps_clk>;
 		pinctrl-names = "i2c_active", "i2c_sleep";
 		pinctrl-0 = <&i2c_6_active>;
 		pinctrl-1 = <&i2c_6_sleep>;
@@ -1643,8 +1652,8 @@
                 qcom,clk-freq-out = <400000>;
                 qcom,clk-freq-in  = <19200000>;
                 clock-names = "iface_clk", "core_clk";
-                clocks = <&clock_gcc GCC_BLSP2_AHB_CLK>,
-                        <&clock_gcc GCC_BLSP2_QUP4_I2C_APPS_CLK>;
+                clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+                        <&clock_gcc clk_gcc_blsp2_qup4_i2c_apps_clk>;
                 pinctrl-names = "i2c_active", "i2c_sleep";
                 pinctrl-0 = <&i2c_8_active>;
                 pinctrl-1 = <&i2c_8_sleep>;
@@ -1700,14 +1709,14 @@
 			 <&clock_gcc RST_USB_HS_BCR>;
 		reset-names = "phy_reset", "phy_por_reset", "core_reset";
 
-		clocks = <&clock_gcc GCC_USB_HS_AHB_CLK>,
-			 <&clock_gcc GCC_USB_HS_SYSTEM_CLK>,
-			 <&clock_gcc GCC_USB2A_PHY_SLEEP_CLK>,
-			 <&clock_rpmcc BIMC_USB_CLK>,
-			 <&clock_rpmcc SNOC_USB_CLK>,
-			 <&clock_rpmcc PNOC_USB_CLK>,
-			 <&clock_gcc GCC_USB_HS_PHY_CFG_AHB_CLK>,
-			 <&clock_rpmcc CXO_OTG_CLK>;
+		clocks = <&clock_gcc clk_gcc_usb_hs_ahb_clk>,
+			 <&clock_gcc clk_gcc_usb_hs_system_clk>,
+			 <&clock_gcc clk_gcc_usb2a_phy_sleep_clk>,
+			 <&clock_gcc clk_bimc_usb_clk>,
+			 <&clock_gcc clk_snoc_usb_clk>,
+			 <&clock_gcc clk_pcnoc_usb_clk>,
+			 <&clock_gcc clk_gcc_usb_hs_phy_cfg_ahb_clk>,
+			 <&clock_gcc clk_xo_otg_clk>;
 		clock-names = "iface_clk", "core_clk", "sleep_clk",
 				"bimc_clk", "snoc_clk", "pcnoc_clk",
 				"phy_csr_clk", "xo";
@@ -1814,7 +1823,7 @@
 			qcom,wcd-rst-gpio-node = <&wcd_rst_gpio>;
 
 			clock-names = "wcd_clk";
-			clocks = <&clock_audio AUDIO_PMI_CLK>;
+			clocks = <&clock_audio clk_audio_pmi_clk>;
 
 			cdc-vdd-buck-supply = <&eldo2_8976>;
 			qcom,cdc-vdd-buck-voltage = <1800000 1800000>;
@@ -1866,7 +1875,7 @@
 		qcom,wan-rx-ring-size = <192>; /* IPA WAN-rx-ring-size*/
 		qcom,lan-rx-ring-size = <192>; /* IPA LAN-rx-ring-size*/
 		clock-names = "core_clk";
-		clocks = <&clock_rpmcc RPM_IPA_CLK>;
+		clocks = <&clock_gcc clk_ipa_clk>;
 		qcom,ee = <0>;
 		qcom,msm-bus,name = "ipa";
 		qcom,msm-bus,num-cases = <3>;
@@ -2020,7 +2029,7 @@
 		qcom,msm-bus,vectors-KBps =
 			<1 618 0 0>,            /* No vote */
 			<1 618 0 800>;          /* 100 MB/s */
-		clocks = <&clock_gcc GCC_PRNG_AHB_CLK>;
+		clocks = <&clock_gcc clk_gcc_prng_ahb_clk>;
 		clock-names = "iface_clk";
 	};
 
@@ -2049,10 +2058,10 @@
 		qcom,msm-bus,vectors-KBps =
 			<55 512 0 0>,
 			<55 512 393600 393600>;
-		clocks = <&clock_gcc CRYPTO_CLK_SRC>,
-			 <&clock_gcc GCC_CRYPTO_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AHB_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AXI_CLK>;
+		clocks = <&clock_gcc clk_crypto_clk_src>,
+			 <&clock_gcc clk_gcc_crypto_clk>,
+			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
+			 <&clock_gcc clk_gcc_crypto_axi_clk>;
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
@@ -2078,10 +2087,10 @@
 		qcom,msm-bus,vectors-KBps =
 			<55 512 0 0>,
 			<55 512 393600 393600>;
-		clocks = <&clock_gcc CRYPTO_CLK_SRC>,
-			 <&clock_gcc GCC_CRYPTO_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AHB_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AXI_CLK>;
+		clocks = <&clock_gcc clk_crypto_clk_src>,
+			 <&clock_gcc clk_gcc_crypto_clk>,
+			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
+			 <&clock_gcc clk_gcc_crypto_axi_clk>;
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
 		qcom,ce-opp-freq = <100000000>;
@@ -2106,10 +2115,10 @@
 			<55 512 0 0>,
 			<55 512 120000 1200000>,
 			<55 512 393600 3936000>;
-		clocks = <&clock_gcc CRYPTO_CLK_SRC>,
-			 <&clock_gcc GCC_CRYPTO_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AHB_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AXI_CLK>;
+		clocks = <&clock_gcc clk_crypto_clk_src>,
+			 <&clock_gcc clk_gcc_crypto_clk>,
+			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
+			 <&clock_gcc clk_gcc_crypto_axi_clk>;
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
 		qcom,ce-opp-freq = <100000000>;
@@ -2340,12 +2349,12 @@
 		gpios = <&msm_gpio 40 0>, <&msm_gpio 41 0>, <&msm_gpio 42 0>,
 			<&msm_gpio 43 0>, <&msm_gpio 44 0>;
 
-		clocks = <&clock_rpmcc CXO_WLAN_CLK>,
-			 <&clock_rpmcc RPM_RF_CLK2>,
-			 //<&clock_debug clk_gcc_debug_mux>,
-			 <&clock_gcc GCC_WCNSS_M_CLK>;
+		clocks = <&clock_rpmcc clk_xo_wlan_clk>,
+			 <&clock_rpmcc clk_rf_clk2>,
+			 <&clock_debug clk_gcc_debug_mux>,
+			 <&clock_gcc clk_wcnss_m_clk>;
 
-		clock-names = "xo", "rf_clk", "wcnss_debug"; // "measure", "wcnss_debug";
+		clock-names = "xo", "rf_clk", "measure", "wcnss_debug";
 
 		qcom,has-autodetect-xo;
 		qcom,is-pronto-v3;
@@ -2357,18 +2366,15 @@
 		reg = <0x1de0000 0x4000>;
 
 		vdd-supply = <&gdsc_venus>;
-		qcom,proxy-reg-names = "vdd", "vdd_cx";
-		qcom,mas-crypto = <&mas_crypto>;
-		vdd_cx-supply = <&pm8950_s2_level>;
-		qcom,vdd_cx-uV-uA = <RPM_SMD_REGULATOR_LEVEL_TURBO 100000>;
+		qcom,proxy-reg-names = "vdd";
 
-		clocks = <&clock_gcc GCC_VENUS0_VCODEC0_CLK>,
-			 <&clock_gcc GCC_VENUS0_AHB_CLK>,
-			 <&clock_gcc GCC_VENUS0_AXI_CLK>,
-			 <&clock_gcc GCC_CRYPTO_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AHB_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AXI_CLK>,
-			 <&clock_gcc CRYPTO_CLK_SRC>;
+		clocks = <&clock_gcc clk_gcc_venus0_vcodec0_clk>,
+			 <&clock_gcc clk_gcc_venus0_ahb_clk>,
+			 <&clock_gcc clk_gcc_venus0_axi_clk>,
+			 <&clock_gcc clk_gcc_crypto_clk>,
+			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
+			 <&clock_gcc clk_gcc_crypto_axi_clk>,
+			 <&clock_gcc clk_crypto_clk_src>;
 
 		clock-names = "core_clk", "iface_clk", "bus_clk",
 				"scm_core_clk", "scm_iface_clk",
@@ -2399,14 +2405,13 @@
 
 		vdd_cx-supply = <&pm8950_s2_level>;
 		qcom,proxy-reg-names = "vdd_cx";
-		//qcom,vdd_cx-uV-uA = <7 100000>;
-		qcom,vdd_cx-uV-uA = <RPM_SMD_REGULATOR_LEVEL_TURBO 100000>;
+		qcom,vdd_cx-uV-uA = <7 100000>;
 
-		clocks = <&clock_rpmcc CXO_PIL_LPASS_CLK>,
-			 <&clock_gcc GCC_CRYPTO_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AHB_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AXI_CLK>,
-			 <&clock_gcc CRYPTO_CLK_SRC>;
+		clocks = <&clock_gcc clk_xo_pil_lpass_clk>,
+			 <&clock_gcc clk_gcc_crypto_clk>,
+			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
+			 <&clock_gcc clk_gcc_crypto_axi_clk>,
+			 <&clock_gcc clk_crypto_clk_src>;
 		clock-names = "xo", "scm_core_clk", "scm_iface_clk",
 				"scm_bus_clk", "scm_core_clk_src";
 		qcom,proxy-clock-names = "xo", "scm_core_clk", "scm_iface_clk",
@@ -2444,8 +2449,8 @@
 		pinctrl-names = "spi_default", "spi_sleep";
 		pinctrl-0 = <&spi0_default &spi0_cs0_active>;
 		pinctrl-1 = <&spi0_sleep &spi0_cs0_sleep>;
-		clocks = <&clock_gcc GCC_BLSP1_AHB_CLK>,
-			 <&clock_gcc GCC_BLSP1_QUP1_SPI_APPS_CLK>;
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			 <&clock_gcc clk_gcc_blsp1_qup1_spi_apps_clk>;
 		clock-names = "iface_clk", "core_clk";
 		qcom,infinite-mode = <0>;
 		qcom,use-bam;
@@ -2469,11 +2474,11 @@
 		vdd_pronto_pll-supply = <&pm8950_l7>;
 		proxy-reg-names = "vdd_pronto_pll";
 		vdd_pronto_pll-uV-uA = <1800000 18000>;
-		clocks = <&clock_rpmcc CXO_PIL_PRONTO_CLK>,
-			 <&clock_gcc GCC_CRYPTO_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AHB_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AXI_CLK>,
-			 <&clock_gcc CRYPTO_CLK_SRC>;
+		clocks = <&clock_gcc clk_xo_pil_pronto_clk>,
+			 <&clock_gcc clk_gcc_crypto_clk>,
+			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
+			 <&clock_gcc clk_gcc_crypto_axi_clk>,
+			 <&clock_gcc clk_crypto_clk_src>;
 
 		clock-names = "xo", "scm_core_clk", "scm_iface_clk",
 				"scm_bus_clk", "scm_core_clk_src";
@@ -2505,7 +2510,7 @@
 		      <0xb4000 0x2000>;
 		reg-names = "dcc-base", "dcc-ram-base";
 
-		clocks = <&clock_gcc GCC_DCC_CLK>;
+		clocks = <&clock_gcc clk_gcc_dcc_clk>;
 		clock-names = "dcc_clk";
 
 		qcom,save-reg;
@@ -2532,14 +2537,13 @@
 		qcom,vdd_pll = <1800000>;
 		vdd_mss-uV = <RPM_SMD_REGULATOR_LEVEL_TURBO>;
 
-		clocks = <&clock_rpmcc RPM_XO_CLK_SRC>,
-			 <&clock_gcc GCC_MSS_CFG_AHB_CLK>,
-			 <&clock_gcc GCC_MSS_Q6_BIMC_AXI_CLK>,
-			 <&clock_gcc GCC_BOOT_ROM_AHB_CLK>,
-			 <&clock_rpmcc RPM_QDSS_CLK>;
-		clock-names = "xo", "iface_clk", "bus_clk", "mem_clk",
-				"qdss_clk";
-		qcom,proxy-clock-names = "xo", "qdss_clk";
+		clocks = <&clock_gcc clk_xo_pil_mss_clk>,
+			 <&clock_gcc clk_gcc_mss_cfg_ahb_clk>,
+			 <&clock_gcc clk_gcc_mss_q6_bimc_axi_clk>,
+			 <&clock_gcc clk_gcc_boot_rom_ahb_clk>;
+
+		clock-names = "xo", "iface_clk", "bus_clk", "mem_clk";
+		qcom,proxy-clock-names = "xo";
 		qcom,active-clock-names = "iface_clk", "bus_clk", "mem_clk";
 
 		qcom,pas-id = <5>;
@@ -2705,7 +2709,7 @@
 //		pinctrl-1 = <&pm8950_gpio_1>;
 		qcom,audio-ref-clk-gpio = <&pm8950_gpios 1 0>;
 		clock-names = "osr_clk";
-		clocks = <&clock_rpmcc RPM_DIV_CLK2>;
+		clocks = <&clock_gcc clk_div_clk2>;
 		qcom,node_has_rpm_clock;
 		#clock-cells = <1>;
 	};
@@ -3044,10 +3048,10 @@
 		compatible = "qcom,mcd";
 		qcom,ce-hw-instance = <0>;
 		qcom,ce-device = <0>;
-		clocks = <&clock_gcc CRYPTO_CLK_SRC>,
-			 <&clock_gcc GCC_CRYPTO_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AHB_CLK>,
-			 <&clock_gcc GCC_CRYPTO_AXI_CLK>;
+		clocks = <&clock_gcc clk_crypto_clk_src>,
+			 <&clock_gcc clk_gcc_crypto_clk>,
+			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
+			 <&clock_gcc clk_gcc_crypto_axi_clk>;
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
 		qcom,ce-opp-freq = <100000000>;
@@ -3074,29 +3078,29 @@
 
 &gdsc_venus {
 	clock-names = "bus_clk", "core_clk";
-	clocks = <&clock_gcc GCC_VENUS0_AXI_CLK>,
-		 <&clock_gcc GCC_VENUS0_VCODEC0_CLK>;
+	clocks = <&clock_gcc clk_gcc_venus0_axi_clk>,
+		 <&clock_gcc clk_gcc_venus0_vcodec0_clk>;
 	status = "okay";
 };
 
 &gdsc_venus_core0 {
 	qcom,support-hw-trigger;
 	clock-names ="core0_clk";
-	clocks = <&clock_gcc GCC_VENUS0_CORE0_VCODEC0_CLK>;
+	clocks = <&clock_gcc clk_gcc_venus0_core0_vcodec0_clk>;
 	status = "okay";
 };
 
 &gdsc_venus_core1 {
 	qcom,support-hw-trigger;
 	clock-names ="core1_clk";
-	clocks = <&clock_gcc GCC_VENUS0_CORE1_VCODEC0_CLK>;
+	clocks = <&clock_gcc clk_gcc_venus0_core1_vcodec0_clk>;
 	status = "okay";
 };
 
 &gdsc_mdss {
 	clock-names = "core_clk", "bus_clk";
-	clocks = <&clock_gcc GCC_MDSS_MDP_CLK>,
-		 <&clock_gcc GCC_MDSS_AXI_CLK>;
+	clocks = <&clock_gcc clk_gcc_mdss_mdp_clk>,
+		 <&clock_gcc clk_gcc_mdss_axi_clk>;
 	proxy-supply = <&gdsc_mdss>;
 	qcom,proxy-consumer-enable;
 	status = "okay";
@@ -3104,51 +3108,50 @@
 
 &gdsc_jpeg {
 	clock-names = "core_clk", "bus_clk";
-	clocks = <&clock_gcc GCC_CAMSS_JPEG0_CLK>,
-		 <&clock_gcc GCC_CAMSS_JPEG_AXI_CLK>;
+	clocks = <&clock_gcc clk_gcc_camss_jpeg0_clk>,
+		 <&clock_gcc clk_gcc_camss_jpeg_axi_clk>;
 	status = "okay";
 };
 
 &gdsc_vfe0 {
 	clock-names = "core_clk", "bus_clk", "micro_clk",
 			"csi_clk";
-	clocks = <&clock_gcc GCC_CAMSS_VFE0_CLK>,
-		 <&clock_gcc GCC_CAMSS_VFE_AXI_CLK>,
-		 <&clock_gcc GCC_CAMSS_MICRO_AHB_CLK>,
-		 <&clock_gcc GCC_CAMSS_CSI_VFE0_CLK>;
+	clocks = <&clock_gcc clk_gcc_camss_vfe0_clk>,
+		 <&clock_gcc clk_gcc_camss_vfe_axi_clk>,
+		 <&clock_gcc clk_gcc_camss_micro_ahb_clk>,
+		 <&clock_gcc clk_gcc_camss_csi_vfe0_clk>;
 	status = "okay";
 };
 
 &gdsc_vfe1 {
 	clock-names = "core_clk", "bus_clk", "micro_clk",
 			"csi_clk";
-	clocks = <&clock_gcc GCC_CAMSS_VFE1_CLK>,
-		 <&clock_gcc GCC_CAMSS_VFE1_AXI_CLK>,
-		 <&clock_gcc GCC_CAMSS_MICRO_AHB_CLK>,
-		 <&clock_gcc GCC_CAMSS_CSI_VFE1_CLK>;
+	clocks = <&clock_gcc clk_gcc_camss_vfe1_clk>,
+		 <&clock_gcc clk_gcc_camss_vfe1_axi_clk>,
+		 <&clock_gcc clk_gcc_camss_micro_ahb_clk>,
+		 <&clock_gcc clk_gcc_camss_csi_vfe1_clk>;
 	status = "okay";
 };
 
 &gdsc_cpp {
 	clock-names = "core_clk", "bus_clk";
-	clocks = <&clock_gcc GCC_CAMSS_CPP_CLK>,
-		 <&clock_gcc GCC_CAMSS_CPP_AXI_CLK>;
+	clocks = <&clock_gcc clk_gcc_camss_cpp_clk>,
+		 <&clock_gcc clk_gcc_camss_cpp_axi_clk>;
 	status = "okay";
 };
 
 &gdsc_oxili_gx {
 	clock-names = "core_root_clk", "gmem_clk";
-	clocks =<&clock_gcc_gfx GCC_GFX3D_CLK_SRC>,
-		<&clock_gcc_gfx GCC_GFX3D_OXILI_GMEM_CLK>;
+	clocks =<&clock_gcc_gfx clk_gfx3d_clk_src>,
+		<&clock_gcc_gfx clk_gcc_oxili_gmem_clk>;
 	qcom,enable-root-clk;
-	qcom,clk-dis-wait-val = <0x5>;
 	parent-supply = <&gfx_vreg_corner>;
 	status = "okay";
 };
 
 &gdsc_oxili_cx {
 	clock-names = "core_clk";
-	clocks = <&clock_gcc_gfx GCC_GFX3D_OXILI_CLK>;
+	clocks = <&clock_gcc_gfx clk_gcc_oxili_gfx3d_clk>;
 	status = "okay";
 };
 

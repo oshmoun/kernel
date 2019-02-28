@@ -30,8 +30,8 @@
                 qcom,clk-freq-out = <400000>;
                 qcom,clk-freq-in  = <19200000>;
                 clock-names = "iface_clk", "core_clk";
-                clocks = <&clock_gcc GCC_BLSP2_AHB_CLK>,
-                        <&clock_gcc GCC_BLSP2_QUP4_I2C_APPS_CLK>;
+                clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+                        <&clock_gcc clk_gcc_blsp2_qup4_i2c_apps_clk>;
                 qcom,noise-rjct-scl = <0>;
                 qcom,noise-rjct-sda = <0>;
                 qcom,master-id = <84>;
