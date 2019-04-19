@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,6 +14,7 @@
 #define __MDSS_PLL_H
 
 #include <linux/mdss_io_util.h>
+#include <linux/clk/msm-clock-generic.h>
 #include <linux/io.h>
 
 #define MDSS_PLL_REG_W(base, offset, data)	\
@@ -29,31 +30,57 @@
 			(base) + (offset))
 
 enum {
-	MDSS_DSI_PLL_LPM,
-	MDSS_DSI_PLL_HPM,
 	MDSS_DSI_PLL_8996,
-	MDSS_DSI_PLL_12NM,
+	MDSS_DSI_PLL_8998,
+	MDSS_DP_PLL_8998,
 	MDSS_HDMI_PLL_8996,
 	MDSS_HDMI_PLL_8996_V2,
 	MDSS_HDMI_PLL_8996_V3,
 	MDSS_HDMI_PLL_8996_V3_1_8,
+	MDSS_HDMI_PLL_8998_3_3,
+	MDSS_HDMI_PLL_8998_1_8,
+	MDSS_DSI_PLL_HPM,
+	MDSS_EDP_PLL,
+	MDSS_HDMI_PLL,
 	MDSS_UNKNOWN_PLL,
 };
 
 enum {
 	MDSS_PLL_TARGET_8996,
-	MDSS_PLL_TARGET_8952,
-	MDSS_PLL_TARGET_8937,
-	MDSS_PLL_TARGET_8953,
-	MDSS_PLL_TARGET_8909,
+	MDSS_PLL_TARGET_8974,
 	MDSS_PLL_TARGET_8976,
-	MDSS_PLL_TARGET_SDM439,
+};
+
+#define DFPS_MAX_NUM_OF_FRAME_RATES 20
+
+struct dfps_panel_info {
+	uint32_t enabled;
+	uint32_t frame_rate_cnt;
+	uint32_t frame_rate[DFPS_MAX_NUM_OF_FRAME_RATES]; /* hz */
+};
+
+struct dfps_pll_codes {
+	uint32_t pll_codes_1;
+	uint32_t pll_codes_2;
+};
+
+struct dfps_codes_info {
+	uint32_t is_valid;
+	uint32_t frame_rate;	/* hz */
+	uint32_t clk_rate;	/* hz */
+	struct dfps_pll_codes pll_codes;
+};
+
+struct dfps_info {
+	struct dfps_panel_info panel_dfps;
+	struct dfps_codes_info codes_dfps[DFPS_MAX_NUM_OF_FRAME_RATES];
+	void *dfps_fb_base;
 };
 
 struct mdss_pll_resources {
 
 	/* Pll specific resources like GPIO, power supply, clocks, etc*/
-	struct mdss_module_power mp;
+	struct dss_module_power mp;
 
 	/*
 	 * dsi/edp/hmdi plls' base register, phy, gdsc and dynamic refresh
@@ -103,6 +130,12 @@ struct mdss_pll_resources {
 	bool		pll_on;
 
 	/*
+	 * Certain plls' have to change the vco freq range to support
+	 * 90 phase difference between bit and byte clock frequency.
+	 */
+	bool		pll_en_90_phase;
+
+	/*
 	 * handoff_status is true of pll is already enabled by bootloader with
 	 * continuous splash enable case. Clock API will call the handoff API
 	 * to enable the status. It is disabled if continuous splash
@@ -112,14 +145,8 @@ struct mdss_pll_resources {
 
 	/*
 	 * caching the pll trim codes in the case of dynamic refresh
-	 * or cmd mode idle screen.
 	 */
 	int		cache_pll_trim_codes[2];
-
-	/*
-	 * caching the pll trim codes rate
-	 */
-	s64		cache_pll_trim_codes_rate;
 
 	/*
 	 * for maintaining the status of saving trim codes
@@ -185,6 +212,23 @@ static inline bool is_gdsc_disabled(struct mdss_pll_resources *pll_res)
 		(!(readl_relaxed(pll_res->gdsc_base) & BIT(0)))) ? false : true;
 }
 
+static inline int mdss_pll_div_prepare(struct clk *c)
+{
+	struct div_clk *div = to_div_clk(c);
+	/* Restore the divider's value */
+	return div->ops->set_div(div, div->data.div);
+}
+
+static inline int mdss_set_mux_sel(struct mux_clk *clk, int sel)
+{
+	return 0;
+}
+
+static inline int mdss_get_mux_sel(struct mux_clk *clk)
+{
+	return 0;
+}
+
 int mdss_pll_resource_enable(struct mdss_pll_resources *pll_res, bool enable);
 int mdss_pll_util_resource_init(struct platform_device *pdev,
 					struct mdss_pll_resources *pll_res);
@@ -196,6 +240,6 @@ int mdss_pll_util_resource_enable(struct mdss_pll_resources *pll_res,
 								bool enable);
 int mdss_pll_util_resource_parse(struct platform_device *pdev,
 				struct mdss_pll_resources *pll_res);
-struct mdss_vreg *mdss_pll_get_mp_by_reg_name(struct mdss_pll_resources *pll_res
+struct dss_vreg *mdss_pll_get_mp_by_reg_name(struct mdss_pll_resources *pll_res
 		, char *name);
 #endif

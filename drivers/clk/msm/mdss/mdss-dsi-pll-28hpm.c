@@ -19,7 +19,12 @@
 #include <linux/clk/msm-clk-provider.h>
 #include <linux/clk/msm-clk.h>
 #include <linux/clk/msm-clock-generic.h>
+
+#ifdef CONFIG_ARCH_MSM8974
+#include <dt-bindings/clock/msm-clocks-8974.h>
+#else
 #include <dt-bindings/clock/msm-clocks-8976.h>
+#endif
 
 #include "mdss-pll.h"
 #include "mdss-dsi-pll.h"
@@ -350,9 +355,6 @@ int dsi_pll_clock_register_hpm(struct platform_device *pdev,
 				struct mdss_pll_resources *pll_res)
 {
 	int rc;
-	int const ssc_freq_min = 30000;
-	int const ssc_freq_max = 33000;
-	int const ssc_ppm_max = 5000;
 
 	if (!pdev || !pdev->dev.of_node) {
 		pr_err("Invalid input parameters\n");
@@ -399,22 +401,8 @@ int dsi_pll_clock_register_hpm(struct platform_device *pdev,
 	byte_mux_clk_ops = clk_ops_gen_mux;
 	byte_mux_clk_ops.prepare = dsi_pll_mux_prepare;
 
-	if (pll_res->ssc_en) {
-		if (!pll_res->ssc_freq || (pll_res->ssc_freq < ssc_freq_min) ||
-			(pll_res->ssc_freq > ssc_freq_max)) {
-			pll_res->ssc_freq = ssc_freq_min;
-			pr_err("SSC frequency out of recommended range. Set to default=%d\n",
-				pll_res->ssc_freq);
-		}
-
-		if (!pll_res->ssc_ppm || (pll_res->ssc_ppm > ssc_ppm_max)) {
-			pll_res->ssc_ppm = ssc_ppm_max;
-			pr_err("SSC PPM out of recommended range. Set to default=%d\n",
-				pll_res->ssc_ppm);
-		}
-	}
-
-	if (pll_res->target_id == MDSS_PLL_TARGET_8976) {
+	if ((pll_res->target_id == MDSS_PLL_TARGET_8974) ||
+	    (pll_res->target_id == MDSS_PLL_TARGET_8976)) {
 		if (!pll_res->index)
 			rc = of_msm_clock_register(pdev->dev.of_node,
 				dsi_pll0_cc, ARRAY_SIZE(dsi_pll0_cc));
