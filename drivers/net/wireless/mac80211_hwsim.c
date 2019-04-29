@@ -2665,7 +2665,8 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 	list_add_tail(&data->list, &hwsim_radios);
 	spin_unlock_bh(&hwsim_radio_lock);
 
-	hwsim_mcast_new_radio(idx, info, param);
+	if (idx > 0)
+		hwsim_mcast_new_radio(idx, info, param);
 
 	return idx;
 

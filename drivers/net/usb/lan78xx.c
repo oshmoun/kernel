@@ -1311,10 +1311,19 @@ static int lan78xx_set_wol(struct net_device *netdev,
 	if (ret < 0)
 		return ret;
 
-	if (wol->wolopts & ~WAKE_ALL)
-		return -EINVAL;
-
-	pdata->wol = wol->wolopts;
+	pdata->wol = 0;
+	if (wol->wolopts & WAKE_UCAST)
+		pdata->wol |= WAKE_UCAST;
+	if (wol->wolopts & WAKE_MCAST)
+		pdata->wol |= WAKE_MCAST;
+	if (wol->wolopts & WAKE_BCAST)
+		pdata->wol |= WAKE_BCAST;
+	if (wol->wolopts & WAKE_MAGIC)
+		pdata->wol |= WAKE_MAGIC;
+	if (wol->wolopts & WAKE_PHY)
+		pdata->wol |= WAKE_PHY;
+	if (wol->wolopts & WAKE_ARP)
+		pdata->wol |= WAKE_ARP;
 
 	device_set_wakeup_enable(&dev->udev->dev, (bool)wol->wolopts);
 
