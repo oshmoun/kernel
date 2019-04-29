@@ -550,16 +550,11 @@ retry:
 			goto retry;
 		}
 
-		if (flags & (MPOL_MF_MOVE | MPOL_MF_MOVE_ALL)) {
-			if (!vma_migratable(vma))
-				break;
-			migrate_page_add(page, qp->pagelist, flags);
-		} else
-			break;
+		migrate_page_add(page, qp->pagelist, flags);
 	}
 	pte_unmap_unlock(pte - 1, ptl);
 	cond_resched();
-	return addr != end ? -EIO : 0;
+	return 0;
 }
 
 static int queue_pages_hugetlb(pte_t *pte, unsigned long hmask,
@@ -633,12 +628,7 @@ static int queue_pages_test_walk(unsigned long start, unsigned long end,
 	unsigned long endvma = vma->vm_end;
 	unsigned long flags = qp->flags;
 
-	/*
-	 * Need check MPOL_MF_STRICT to return -EIO if possible
-	 * regardless of vma_migratable
-	 */
-	if (!vma_migratable(vma) &&
-	    !(flags & MPOL_MF_STRICT))
+	if (!vma_migratable(vma))
 		return 1;
 
 	if (endvma > end)
@@ -665,7 +655,7 @@ static int queue_pages_test_walk(unsigned long start, unsigned long end,
 	}
 
 	/* queue pages from current vma */
-	if (flags & MPOL_MF_VALID)
+	if (flags & (MPOL_MF_MOVE | MPOL_MF_MOVE_ALL))
 		return 0;
 	return 1;
 }
