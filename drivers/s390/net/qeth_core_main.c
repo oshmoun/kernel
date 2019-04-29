@@ -23,7 +23,6 @@
 #include <linux/netdevice.h>
 #include <linux/netdev_features.h>
 #include <linux/skbuff.h>
-#include <linux/vmalloc.h>
 
 #include <net/iucv/af_iucv.h>
 #include <net/dsfield.h>
@@ -4716,7 +4715,7 @@ int qeth_query_oat_command(struct qeth_card *card, char __user *udata)
 
 	priv.buffer_len = oat_data.buffer_len;
 	priv.response_len = 0;
-	priv.buffer = vzalloc(oat_data.buffer_len);
+	priv.buffer =  kzalloc(oat_data.buffer_len, GFP_KERNEL);
 	if (!priv.buffer) {
 		rc = -ENOMEM;
 		goto out;
@@ -4757,7 +4756,7 @@ int qeth_query_oat_command(struct qeth_card *card, char __user *udata)
 			rc = -EFAULT;
 
 out_free:
-	vfree(priv.buffer);
+	kfree(priv.buffer);
 out:
 	return rc;
 }
