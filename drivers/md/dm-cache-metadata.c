@@ -1262,8 +1262,8 @@ static int __load_mappings(struct dm_cache_metadata *cmd,
 		if (hints_valid) {
 			r = dm_array_cursor_next(&cmd->hint_cursor);
 			if (r) {
-				dm_array_cursor_end(&cmd->hint_cursor);
-				hints_valid = false;
+				DMERR("dm_array_cursor_next for hint failed");
+				goto out;
 			}
 		}
 	}
