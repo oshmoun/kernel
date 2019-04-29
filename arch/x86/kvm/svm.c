@@ -1333,23 +1333,20 @@ static u64 *avic_get_physical_id_entry(struct kvm_vcpu *vcpu, int index)
 static int avic_init_access_page(struct kvm_vcpu *vcpu)
 {
 	struct kvm *kvm = vcpu->kvm;
-	int ret = 0;
+	int ret;
 
-	mutex_lock(&kvm->slots_lock);
 	if (kvm->arch.apic_access_page_done)
-		goto out;
+		return 0;
 
-	ret = __x86_set_memory_region(kvm,
-				      APIC_ACCESS_PAGE_PRIVATE_MEMSLOT,
-				      APIC_DEFAULT_PHYS_BASE,
-				      PAGE_SIZE);
+	ret = x86_set_memory_region(kvm,
+				    APIC_ACCESS_PAGE_PRIVATE_MEMSLOT,
+				    APIC_DEFAULT_PHYS_BASE,
+				    PAGE_SIZE);
 	if (ret)
-		goto out;
+		return ret;
 
 	kvm->arch.apic_access_page_done = true;
-out:
-	mutex_unlock(&kvm->slots_lock);
-	return ret;
+	return 0;
 }
 
 static int avic_init_backing_page(struct kvm_vcpu *vcpu)
