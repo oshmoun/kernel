@@ -955,22 +955,19 @@ static unsigned int early_drop_list(struct net *net,
 	return drops;
 }
 
-static noinline int early_drop(struct net *net, unsigned int hash)
+static noinline int early_drop(struct net *net, unsigned int _hash)
 {
-	unsigned int i, bucket;
+	unsigned int i;
 
 	for (i = 0; i < NF_CT_EVICTION_RANGE; i++) {
 		struct hlist_nulls_head *ct_hash;
-		unsigned int hsize, drops;
+		unsigned int hash, hsize, drops;
 
 		rcu_read_lock();
 		nf_conntrack_get_ht(&ct_hash, &hsize);
-		if (!i)
-			bucket = reciprocal_scale(hash, hsize);
-		else
-			bucket = (bucket + 1) % hsize;
+		hash = reciprocal_scale(_hash++, hsize);
 
-		drops = early_drop_list(net, &ct_hash[bucket]);
+		drops = early_drop_list(net, &ct_hash[hash]);
 		rcu_read_unlock();
 
 		if (drops) {
