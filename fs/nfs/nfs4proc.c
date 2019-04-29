@@ -2748,8 +2748,7 @@ static int _nfs4_open_and_get_state(struct nfs4_opendata *opendata,
 			nfs4_schedule_stateid_recovery(server, state);
 	}
 out:
-	if (!opendata->cancelled)
-		nfs4_sequence_free_slot(&opendata->o_res.seq_res);
+	nfs4_sequence_free_slot(&opendata->o_res.seq_res);
 	return ret;
 }
 
