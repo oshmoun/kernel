@@ -362,13 +362,7 @@ static irqreturn_t cdns_uart_isr(int irq, void *dev_id)
 		cdns_uart_handle_tx(dev_id);
 		isrstatus &= ~CDNS_UART_IXR_TXEMPTY;
 	}
-
-	/*
-	 * Skip RX processing if RX is disabled as RXEMPTY will never be set
-	 * as read bytes will not be removed from the FIFO.
-	 */
-	if (isrstatus & CDNS_UART_IXR_RXMASK &&
-	    !(readl(port->membase + CDNS_UART_CR) & CDNS_UART_CR_RX_DIS))
+	if (isrstatus & CDNS_UART_IXR_RXMASK)
 		cdns_uart_handle_rx(dev_id, isrstatus);
 
 	spin_unlock(&port->lock);

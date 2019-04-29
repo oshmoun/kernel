@@ -253,7 +253,7 @@ int __cpu_disable(void)
 	/*
 	 * OK - migrate IRQs away from this CPU
 	 */
-	irq_migrate_all_off_this_cpu();
+	migrate_irqs();
 
 	/*
 	 * Flush user cache and TLB mappings, and then remove this CPU
