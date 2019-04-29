@@ -1574,8 +1574,6 @@ static void tun_setup(struct net_device *dev)
  */
 static int tun_validate(struct nlattr *tb[], struct nlattr *data[])
 {
-	if (!data)
-		return 0;
 	return -EINVAL;
 }
 
