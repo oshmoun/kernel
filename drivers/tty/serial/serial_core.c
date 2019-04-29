@@ -543,12 +543,10 @@ static int uart_put_char(struct tty_struct *tty, unsigned char c)
 	int ret = 0;
 
 	circ = &state->xmit;
-	port = uart_port_lock(state, flags);
-	if (!circ->buf) {
-		uart_port_unlock(port, flags);
+	if (!circ->buf)
 		return 0;
-	}
 
+	port = uart_port_lock(state, flags);
 	if (port && uart_circ_chars_free(circ) != 0) {
 		circ->buf[circ->head] = c;
 		circ->head = (circ->head + 1) & (UART_XMIT_SIZE - 1);
@@ -581,13 +579,11 @@ static int uart_write(struct tty_struct *tty,
 		return -EL3HLT;
 	}
 
-	port = uart_port_lock(state, flags);
 	circ = &state->xmit;
-	if (!circ->buf) {
-		uart_port_unlock(port, flags);
+	if (!circ->buf)
 		return 0;
-	}
 
+	port = uart_port_lock(state, flags);
 	while (port) {
 		c = CIRC_SPACE_TO_END(circ->head, circ->tail, UART_XMIT_SIZE);
 		if (count < c)
