@@ -641,8 +641,8 @@ static void arch_dump_stack(void *info)
 
 	if (regs)
 		show_regs(regs);
-	else
-		dump_stack();
+
+	dump_stack();
 }
 
 void arch_trigger_cpumask_backtrace(const cpumask_t *mask, bool exclude_self)
