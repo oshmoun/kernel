@@ -304,8 +304,8 @@ static int __flush_iotlb(struct iommu_domain *domain)
 			goto fail;
 
 		SET_TLBIASID(iommu_drvdata->cb_base, ctx_drvdata->num,
-			     priv->asid);
-		__sync_tlb(iommu_drvdata, ctx_drvdata->num, priv);
+			     base_priv->asid);
+		__sync_tlb(iommu_drvdata, ctx_drvdata->num, base_priv);
 		__disable_clocks(iommu_drvdata);
 	}
 fail:
@@ -347,7 +347,7 @@ static void msm_iommu_tlb_sync(void *cookie)
 		if (ret)
 			goto fail;
 
-		__sync_tlb(iommu_drvdata, ctx_drvdata->num, priv);
+		__sync_tlb(iommu_drvdata, ctx_drvdata->num, base_priv);
 
 		__disable_clocks(iommu_drvdata);
 	}
@@ -402,7 +402,7 @@ static void msm_iommu_tlb_flush_range_nosync(unsigned long iova, size_t size,
 			goto fail;
 
 		va &= ~12UL;
-		va |= priv->asid;
+		va |= base_priv->asid;
 
 		if (leaf) {
 			SET_TLBIVAL(iommu_drvdata->cb_base,
