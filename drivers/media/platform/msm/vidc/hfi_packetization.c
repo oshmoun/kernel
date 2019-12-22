@@ -593,9 +593,11 @@ static int get_hfi_extradata_index(enum hal_extradata_id index)
 	case HAL_EXTRADATA_VPX_COLORSPACE:
 		ret = HFI_PROPERTY_PARAM_VDEC_VPX_COLORSPACE_EXTRADATA;
 		break;
+/*
 	case HAL_EXTRADATA_UBWC_CR_STATS_INFO:
 		ret = HFI_PROPERTY_PARAM_VDEC_UBWC_CR_STAT_INFO_EXTRADATA;
 		break;
+*/
 	case HAL_EXTRADATA_HDR10PLUS_METADATA:
 		ret = HFI_PROPERTY_PARAM_VENC_HDR10PLUS_METADATA_EXTRADATA;
 		break;
@@ -1673,6 +1675,7 @@ int create_pkt_cmd_session_set_property(
 				id);
 			rc = -EINVAL;
 		}
+		dprintk(VIDC_ERR, "HAL_PARAM_INDEX_EXTRADATA %d\n" , id);
 		pkt->size += sizeof(struct hfi_index_extradata_config);
 		break;
 	}
@@ -2100,6 +2103,7 @@ int create_pkt_cmd_session_set_property(
 		rc = -ENOTSUPP;
 		break;
 	}
+	dprintk(VIDC_ERR, "%s: set prop %#x hfi type %#x\n", __func__, ptype, (pkt && pkt->rg_property_data[0]) ? pkt->rg_property_data[0] : 0);
 	return rc;
 }
 
@@ -2277,6 +2281,9 @@ static int create_3x_pkt_cmd_session_set_property(
 #endif
 	/* Deprecated param on Venus 3xx */
 	case HAL_PARAM_VDEC_CONTINUE_DATA_TRANSFER:
+	case HAL_PARAM_VIDEO_WORK_MODE:
+	case HAL_PARAM_VIDEO_CORES_USAGE:
+	case HAL_PARAM_VPE_COLOR_SPACE_CONVERSION:
 	{
 		rc = -ENOTSUPP;
 		break;
