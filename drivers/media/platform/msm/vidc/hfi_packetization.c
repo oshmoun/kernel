@@ -2284,6 +2284,7 @@ static int create_3x_pkt_cmd_session_set_property(
 	case HAL_PARAM_VIDEO_WORK_MODE:
 	case HAL_PARAM_VIDEO_CORES_USAGE:
 	case HAL_PARAM_VPE_COLOR_SPACE_CONVERSION:
+	case HAL_PARAM_VPE_ROTATION:
 	{
 		rc = -ENOTSUPP;
 		break;
