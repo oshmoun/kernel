@@ -25,24 +25,23 @@
 #include <linux/reset-controller.h>
 #include <dt-bindings/clock/qcom,gcc-sdm660.h>
 
+#include "clk-pll.h"
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
 #include "clk-debug.h"
 #include "common.h"
-#include "clk-pll.h"
 #include "clk-regmap.h"
 #include "clk-rcg.h"
 #include "reset.h"
 #include "vdd-level-660.h"
 
-#define BM(msb, lsb)	(((((uint32_t)-1) << (31-msb)) >> (31-msb+lsb)) << lsb)
 #define F(f, s, h, m, n) { (f), (s), (2 * (h) - 1), (m), (n) }
+#define BM(msb, lsb) (((((uint32_t)-1) << (31-msb)) >> (31-msb+lsb)) << lsb)
 
 static DEFINE_VDD_REGULATORS(vdd_dig, VDD_DIG_NUM, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_dig_ao, VDD_DIG_NUM, 1, vdd_corner);
 
 enum {
-	P_XO,
 	P_CORE_BI_PLL_TEST_SE,
 	P_GPLL0_OUT_MAIN,
 	P_GPLL1_OUT_MAIN,
@@ -50,6 +49,7 @@ enum {
 	P_PLL0_EARLY_DIV_CLK_SRC,
 	P_PLL1_EARLY_DIV_CLK_SRC,
 	P_SLEEP_CLK,
+	P_XO,
 };
 
 static const struct parent_map gcc_parent_map_0[] = {
@@ -197,23 +197,10 @@ static struct clk_fixed_factor xo = {
 	},
 };
 
-static struct clk_fixed_factor bi_tcxo = {
-	.mult = 1,
-	.div = 1,
-	.hw.init = &(struct clk_init_data){
-		.name = "bi_tcxo",
-		.parent_names = (const char *[]){ "xo" },
-		.num_parents = 1,
-		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_fixed_factor_ops,
-	},
-};
-
 static unsigned int soft_vote_gpll0;
 
 static struct clk_alpha_pll gpll0_out_main = {
 	.offset = 0x0,
-	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
 	.soft_vote = &soft_vote_gpll0,
 	.soft_vote_mask = PLL_SOFT_VOTE_PRIMARY,
 	.flags = SUPPORTS_FSM_VOTE,
@@ -231,7 +218,6 @@ static struct clk_alpha_pll gpll0_out_main = {
 
 static struct clk_alpha_pll gpll0_ao_out_main = {
 	.offset = 0x0,
-	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
 	.soft_vote = &soft_vote_gpll0,
 	.soft_vote_mask = PLL_SOFT_VOTE_CPU,
 	.flags = SUPPORTS_FSM_VOTE,
@@ -260,7 +246,6 @@ static struct clk_fixed_factor gpll0_out_early_div = {
 
 static struct clk_alpha_pll gpll1_out_main = {
 	.offset = 0x1000,
-	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
 	.clkr = {
 		.enable_reg = 0x52000,
 		.enable_mask = BIT(1),
@@ -286,7 +271,6 @@ static struct clk_fixed_factor gpll1_out_early_div = {
 
 static struct clk_alpha_pll gpll4_out_main = {
 	.offset = 0x77000,
-	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
 	.clkr = {
 		.enable_reg = 0x52000,
 		.enable_mask = BIT(4),
@@ -1173,8 +1157,6 @@ static struct clk_rcg2 usb3_phy_aux_clk_src = {
 static struct clk_branch gcc_aggre2_ufs_axi_clk = {
 	.halt_reg = 0x75034,
 	.halt_check = BRANCH_HALT,
-	.hwcg_reg = 0x75034,
-	.hwcg_bit = 1,
 	.clkr = {
 		.enable_reg = 0x75034,
 		.enable_mask = BIT(0),
@@ -1222,8 +1204,6 @@ static struct clk_branch gcc_bimc_gfx_clk = {
 static struct clk_branch gcc_bimc_hmss_axi_clk = {
 	.halt_reg = 0x48004,
 	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x48004,
-	.hwcg_bit = 1,
 	.clkr = {
 		.enable_reg = 0x52004,
 		.enable_mask = BIT(22),
@@ -1764,8 +1744,6 @@ static struct clk_branch gcc_gpu_bimc_gfx_clk = {
 static struct clk_branch gcc_gpu_cfg_ahb_clk = {
 	.halt_reg = 0x71004,
 	.halt_check = BRANCH_VOTED,
-	.hwcg_reg = 0x71004,
-	.hwcg_bit = 1,
 	.clkr = {
 		.enable_reg = 0x71004,
 		.enable_mask = BIT(0),
@@ -1783,17 +1761,14 @@ static struct clk_gate2 gpll0_out_msscc = {
 		.enable_mask = BIT(2),
 		.hw.init = &(struct clk_init_data){
 			.name = "gpll0_out_msscc",
-			.parent_names = (const char *[]){
-				"gpll0_out_main",
-			},
-			.num_parents = 1,
 			.ops = &clk_gate2_ops,
 		},
 	},
 };
 
-static struct clk_gate2 gcc_gpu_gpll0_clk = {
-	.udelay = 500,
+static struct clk_branch gcc_gpu_gpll0_clk = {
+	.halt_reg = 0x5200c,
+	.halt_check = BRANCH_HALT_DELAY,
 	.clkr = {
 		.enable_reg = 0x5200c,
 		.enable_mask = BIT(4),
@@ -1803,14 +1778,14 @@ static struct clk_gate2 gcc_gpu_gpll0_clk = {
 				"gpll0_out_main",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_gate2_ops,
+			.ops = &clk_branch2_ops,
 		},
 	},
 };
 
-static struct clk_gate2 gcc_gpu_gpll0_div_clk = {
-	.udelay = 500,
+static struct clk_branch gcc_gpu_gpll0_div_clk = {
+	.halt_reg = 0x5200c,
+	.halt_check = BRANCH_HALT_DELAY,
 	.clkr = {
 		.enable_reg = 0x5200c,
 		.enable_mask = BIT(3),
@@ -1820,8 +1795,7 @@ static struct clk_gate2 gcc_gpu_gpll0_div_clk = {
 				"gpll0_out_early_div",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_gate2_ops,
+			.ops = &clk_branch2_ops,
 		},
 	},
 };
@@ -1858,8 +1832,9 @@ static struct clk_branch gcc_hmss_rbcpr_clk = {
 	},
 };
 
-static struct clk_gate2 gcc_mmss_gpll0_clk = {
-	.udelay = 500,
+static struct clk_branch gcc_mmss_gpll0_clk = {
+	.halt_reg = 0x5200c,
+	.halt_check = BRANCH_HALT_DELAY,
 	.clkr = {
 		.enable_reg = 0x5200c,
 		.enable_mask = BIT(1),
@@ -1869,14 +1844,14 @@ static struct clk_gate2 gcc_mmss_gpll0_clk = {
 				"gpll0_out_main",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_gate2_ops,
+			.ops = &clk_branch2_ops,
 		},
 	},
 };
 
-static struct clk_gate2 gcc_mmss_gpll0_div_clk = {
-	.udelay = 500,
+static struct clk_branch gcc_mmss_gpll0_div_clk = {
+	.halt_reg = 0x5200c,
+	.halt_check = BRANCH_HALT_DELAY,
 	.clkr = {
 		.enable_reg = 0x5200c,
 		.enable_mask = BIT(0),
@@ -1886,8 +1861,7 @@ static struct clk_gate2 gcc_mmss_gpll0_div_clk = {
 				"gpll0_out_early_div",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_gate2_ops,
+			.ops = &clk_branch2_ops,
 		},
 	},
 };
@@ -1908,8 +1882,6 @@ static struct clk_branch gcc_mmss_noc_cfg_ahb_clk = {
 static struct clk_branch gcc_mmss_sys_noc_axi_clk = {
 	.halt_reg = 0x9000,
 	.halt_check = BRANCH_HALT,
-	.hwcg_reg = 0x9000,
-	.hwcg_bit = 1,
 	.clkr = {
 		.enable_reg = 0x9000,
 		.enable_mask = BIT(0),
@@ -1934,9 +1906,6 @@ static struct clk_branch gcc_mss_cfg_ahb_clk = {
 
 static struct clk_branch gcc_mss_mnoc_bimc_axi_clk = {
 	.halt_reg = 0x8a004,
-	.halt_check = BRANCH_HALT,
-	.hwcg_reg = 0x8a004,
-	.hwcg_bit = 1,
 	.clkr = {
 		.enable_reg = 0x8a004,
 		.enable_mask = BIT(0),
@@ -2168,8 +2137,6 @@ static struct clk_branch gcc_ufs_ahb_clk = {
 static struct clk_branch gcc_ufs_axi_clk = {
 	.halt_reg = 0x75008,
 	.halt_check = BRANCH_HALT,
-	.hwcg_reg = 0x75008,
-	.hwcg_bit = 1,
 	.clkr = {
 		.enable_reg = 0x75008,
 		.enable_mask = BIT(0),
@@ -2568,7 +2535,6 @@ static struct clk_fixed_factor gcc_ce1_axi_m_clk = {
 
 struct clk_hw *gcc_sdm660_hws[] = {
 	[GCC_XO] =      &xo.hw,
-	[GCC_FAKE_BI_TCXO] = &bi_tcxo.hw,
 	[GCC_GPLL0_EARLY_DIV] = &gpll0_out_early_div.hw,
 	[GCC_GPLL1_EARLY_DIV] = &gpll1_out_early_div.hw,
 	[GCC_CE1_AHB_M_CLK] = &gcc_ce1_ahb_m_clk.hw,
@@ -2735,6 +2701,8 @@ static const struct qcom_cc_desc gcc_660_desc = {
 	.config = &gcc_660_regmap_config,
 	.clks = gcc_660_clocks,
 	.num_clks = ARRAY_SIZE(gcc_660_clocks),
+	.hwclks = gcc_sdm660_hws,
+	.num_hwclks = ARRAY_SIZE(gcc_sdm660_hws),
 	.resets = gcc_660_resets,
 	.num_resets = ARRAY_SIZE(gcc_660_resets),
 };
@@ -2747,12 +2715,13 @@ MODULE_DEVICE_TABLE(of, gcc_660_match_table);
 
 static int gcc_660_probe(struct platform_device *pdev)
 {
-	int i, ret = 0;
+	int ret = 0;
 	struct regmap *regmap;
 
 	regmap = qcom_cc_map(pdev, &gcc_660_desc);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
+
 
 	vdd_dig.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_dig");
 	if (IS_ERR(vdd_dig.regulator[0])) {
@@ -2768,13 +2737,6 @@ static int gcc_660_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev,
 					"Unable to get vdd_dig_ao regulator\n");
 		return PTR_ERR(vdd_dig_ao.regulator[0]);
-	}
-
-	/* Register the hws */
-	for (i = 0; i < ARRAY_SIZE(gcc_sdm660_hws); i++) {
-		ret = devm_clk_hw_register(&pdev->dev, gcc_sdm660_hws[i]);
-		if (ret)
-			return ret;
 	}
 
 	ret = qcom_cc_really_probe(pdev, &gcc_660_desc, regmap);
@@ -2799,7 +2761,7 @@ static int gcc_660_probe(struct platform_device *pdev)
 	/* Set the HMSS_GPLL0_SRC for 300MHz to CPU subsystem */
 	clk_set_rate(hmss_gpll0_clk_src.clkr.hw.clk, 300000000);
 
-	dev_info(&pdev->dev, "Registered GCC clocks\n");
+	pr_err("Registered GCC clocks\n");
 
 	return ret;
 }
@@ -3010,11 +2972,8 @@ static const char *const debug_mux_parent_names[] = {
 
 static struct clk_debug_mux gcc_debug_mux = {
 	.priv = &debug_mux_priv,
-	//.en_mask = BIT(16),
-	.src_sel_mask = 0x3FF,
-	.src_sel_shift = 0,
-	.post_div_mask = 0xF,
-	.post_div_shift = 0,
+	.en_mask = BIT(16),
+	.mask = 0x3FF,
 	MUX_SRC_LIST(
 		{ "snoc_clk",				0x000 },
 		{ "cnoc_clk",				0x00E },
@@ -3095,185 +3054,185 @@ static struct clk_debug_mux gcc_debug_mux = {
 		{ "gcc_ufs_rx_symbol_1_clk",		0x162 },
 		{ "gcc_ufs_tx_symbol_0_clk",		0x0EC },
 		{ "gcc_usb3_phy_pipe_clk",		0x040 },
-		{ "mmssnoc_axi_clk",	0x22,   DISP_CC,
+		{ "mmssnoc_axi_clk",	0x22,   CAM_CC,
 					0x004, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_bimc_smmu_ahb_clk", 0x22,	DISP_CC,
+		{ "mmss_bimc_smmu_ahb_clk", 0x22,	CAM_CC,
 					0x00C, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_bimc_smmu_axi_clk",	0x22,	DISP_CC,
+		{ "mmss_bimc_smmu_axi_clk",	0x22,	CAM_CC,
 					0x00D, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_ahb_clk",		0x22,	DISP_CC,
+		{ "mmss_camss_ahb_clk",		0x22,	CAM_CC,
 					0x037, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_cci_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_cci_ahb_clk",	0x22,	CAM_CC,
 					0x02E, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_cci_clk",		0x22,	DISP_CC,
+		{ "mmss_camss_cci_clk",		0x22,	CAM_CC,
 					0x02D, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_cphy_csid0_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_cphy_csid0_clk",	0x22,	CAM_CC,
 					0x08D, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_cphy_csid1_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_cphy_csid1_clk",	0x22,	CAM_CC,
 					0x08E, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_cphy_csid2_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_cphy_csid2_clk",	0x22,	CAM_CC,
 					0x08F, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_cphy_csid3_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_cphy_csid3_clk",	0x22,	CAM_CC,
 					0x090, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_cpp_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_cpp_ahb_clk",	0x22,	CAM_CC,
 					0x03B, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_cpp_axi_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_cpp_axi_clk",	0x22,	CAM_CC,
 					0x07A, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_cpp_clk",		0x22,	DISP_CC,
+		{ "mmss_camss_cpp_clk",		0x22,	CAM_CC,
 					0x03A, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_cpp_vbif_ahb_clk", 0x22,	DISP_CC,
+		{ "mmss_camss_cpp_vbif_ahb_clk", 0x22,	CAM_CC,
 					0x073, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi0_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi0_ahb_clk",	0x22,	CAM_CC,
 					0x042, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi0_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi0_clk",	0x22,	CAM_CC,
 					0x041, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi0phytimer_clk", 0x22,	DISP_CC,
+		{ "mmss_camss_csi0phytimer_clk", 0x22,	CAM_CC,
 					0x02F, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi0pix_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi0pix_clk",	0x22,	CAM_CC,
 					0x045, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi0rdi_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi0rdi_clk",	0x22,	CAM_CC,
 					0x044, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi1_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi1_ahb_clk",	0x22,	CAM_CC,
 					0x047, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi1_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi1_clk",	0x22,	CAM_CC,
 					0x046, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi1phytimer_clk", 0x22,	DISP_CC,
+		{ "mmss_camss_csi1phytimer_clk", 0x22,	CAM_CC,
 					0x030, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi1pix_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi1pix_clk",	0x22,	CAM_CC,
 					0x04A, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi1rdi_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi1rdi_clk",	0x22,	CAM_CC,
 					0x049, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi2_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi2_ahb_clk",	0x22,	CAM_CC,
 					0x04C, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi2_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi2_clk",	0x22,	CAM_CC,
 					0x04B, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi2phytimer_clk", 0x22,	DISP_CC,
+		{ "mmss_camss_csi2phytimer_clk", 0x22,	CAM_CC,
 					0x031, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi2pix_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi2pix_clk",	0x22,	CAM_CC,
 					0x04F, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi2rdi_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi2rdi_clk",	0x22,	CAM_CC,
 					0x04E, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi3_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi3_ahb_clk",	0x22,	CAM_CC,
 					0x051, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi3_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi3_clk",	0x22,	CAM_CC,
 					0x050, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi3pix_clk",	0x22,   DISP_CC,
+		{ "mmss_camss_csi3pix_clk",	0x22,   CAM_CC,
 					0x054, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi3rdi_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi3rdi_clk",	0x22,	CAM_CC,
 					0x053, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi_vfe0_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi_vfe0_clk",	0x22,	CAM_CC,
 					0x03F, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csi_vfe1_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csi_vfe1_clk",	0x22,	CAM_CC,
 					0x040, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csiphy0_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csiphy0_clk",	0x22,	CAM_CC,
 					0x043, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csiphy1_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csiphy1_clk",	0x22,	CAM_CC,
 					0x085, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_csiphy2_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_csiphy2_clk",	0x22,	CAM_CC,
 					0x088, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_gp0_clk",		0x22,	DISP_CC,
+		{ "mmss_camss_gp0_clk",		0x22,	CAM_CC,
 					0x027, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_gp1_clk",		0x22,	DISP_CC,
+		{ "mmss_camss_gp1_clk",		0x22,	CAM_CC,
 					0x028, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_ispif_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_ispif_ahb_clk",	0x22,	CAM_CC,
 					0x033, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_jpeg0_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_jpeg0_clk",	0x22,	CAM_CC,
 					0x032, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_jpeg_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_jpeg_ahb_clk",	0x22,	CAM_CC,
 					0x035, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_jpeg_axi_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_jpeg_axi_clk",	0x22,	CAM_CC,
 					0x036, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_mclk0_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_mclk0_clk",	0x22,	CAM_CC,
 					0x029, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_mclk1_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_mclk1_clk",	0x22,	CAM_CC,
 					0x02A, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_mclk2_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_mclk2_clk",	0x22,	CAM_CC,
 					0x02B, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_mclk3_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_mclk3_clk",	0x22,	CAM_CC,
 					0x02C, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_micro_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_micro_ahb_clk",	0x22,	CAM_CC,
 					0x026, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_top_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_top_ahb_clk",	0x22,	CAM_CC,
 					0x025, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_vfe0_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_vfe0_ahb_clk",	0x22,	CAM_CC,
 					0x086, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_vfe0_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_vfe0_clk",	0x22,	CAM_CC,
 					0x038, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_vfe0_stream_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_vfe0_stream_clk",	0x22,	CAM_CC,
 					0x071, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_vfe1_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_vfe1_ahb_clk",	0x22,	CAM_CC,
 					0x087, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_vfe1_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_vfe1_clk",	0x22,	CAM_CC,
 					0x039, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_vfe1_stream_clk",	0x22,	DISP_CC,
+		{ "mmss_camss_vfe1_stream_clk",	0x22,	CAM_CC,
 					0x072, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_vfe_vbif_ahb_clk", 0x22,	DISP_CC,
+		{ "mmss_camss_vfe_vbif_ahb_clk", 0x22,	CAM_CC,
 					0x03C, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_camss_vfe_vbif_axi_clk", 0x22,	DISP_CC,
+		{ "mmss_camss_vfe_vbif_axi_clk", 0x22,	CAM_CC,
 					0x03D, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_csiphy_ahb2crif_clk",	0x22,	DISP_CC,
+		{ "mmss_csiphy_ahb2crif_clk",	0x22,	CAM_CC,
 					0x0B8, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_ahb_clk",		0x22,	DISP_CC,
+		{ "mmss_mdss_ahb_clk",		0x22,	CAM_CC,
 					0x022, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_axi_clk",		0x22,	DISP_CC,
+		{ "mmss_mdss_axi_clk",		0x22,	CAM_CC,
 					0x024, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_byte0_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_byte0_clk",	0x22,	CAM_CC,
 					0x01E, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_byte0_intf_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_byte0_intf_clk",	0x22,	CAM_CC,
 					0x0AD, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_byte1_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_byte1_clk",	0x22,	CAM_CC,
 					0x01F, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_byte1_intf_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_byte1_intf_clk",	0x22,	CAM_CC,
 					0x0B6, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_dp_aux_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_dp_aux_clk",	0x22,	CAM_CC,
 					0x09C, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_dp_crypto_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_dp_crypto_clk",	0x22,	CAM_CC,
 					0x09A, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_dp_gtc_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_dp_gtc_clk",	0x22,	CAM_CC,
 					0x09D, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_dp_link_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_dp_link_clk",	0x22,	CAM_CC,
 					0x098, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_dp_link_intf_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_dp_link_intf_clk",	0x22,	CAM_CC,
 					0x099, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_dp_pixel_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_dp_pixel_clk",	0x22,	CAM_CC,
 					0x09B, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_esc0_clk",		0x22,	DISP_CC,
+		{ "mmss_mdss_esc0_clk",		0x22,	CAM_CC,
 					0x020, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_esc1_clk",		0x22,	DISP_CC,
+		{ "mmss_mdss_esc1_clk",		0x22,	CAM_CC,
 					0x021, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_hdmi_dp_ahb_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_hdmi_dp_ahb_clk",	0x22,	CAM_CC,
 					0x023, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_mdp_clk",		0x22,	DISP_CC,
+		{ "mmss_mdss_mdp_clk",		0x22,	CAM_CC,
 					0x014, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_pclk0_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_pclk0_clk",	0x22,	CAM_CC,
 					0x016, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_pclk1_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_pclk1_clk",	0x22,	CAM_CC,
 					0x017, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_rot_clk",		0x22,	DISP_CC,
+		{ "mmss_mdss_rot_clk",		0x22,	CAM_CC,
 					0x012, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mdss_vsync_clk",	0x22,	DISP_CC,
+		{ "mmss_mdss_vsync_clk",	0x22,	CAM_CC,
 					0x01C, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_misc_ahb_clk",		0x22,	DISP_CC,
+		{ "mmss_misc_ahb_clk",		0x22,	CAM_CC,
 					0x003, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_misc_cxo_clk",		0x22,	DISP_CC,
+		{ "mmss_misc_cxo_clk",		0x22,	CAM_CC,
 					0x077, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_mnoc_ahb_clk",		0x22,	DISP_CC,
+		{ "mmss_mnoc_ahb_clk",		0x22,	CAM_CC,
 					0x001, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_snoc_dvm_axi_clk",	0x22,	DISP_CC,
+		{ "mmss_snoc_dvm_axi_clk",	0x22,	CAM_CC,
 					0x013, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_video_ahb_clk",		0x22,	DISP_CC,
+		{ "mmss_video_ahb_clk",		0x22,	CAM_CC,
 					0x011, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_video_axi_clk",		0x22,	DISP_CC,
+		{ "mmss_video_axi_clk",		0x22,	CAM_CC,
 					0x00F, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_video_core_clk",	0x22,	DISP_CC,
+		{ "mmss_video_core_clk",	0x22,	CAM_CC,
 					0x00E, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_video_subcore0_clk",	0x22,	DISP_CC,
+		{ "mmss_video_subcore0_clk",	0x22,	CAM_CC,
 					0x01A, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_throttle_camss_axi_clk", 0x22,	DISP_CC,
+		{ "mmss_throttle_camss_axi_clk", 0x22,	CAM_CC,
 					0x0AA, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_throttle_mdss_axi_clk",	0x22,	DISP_CC,
+		{ "mmss_throttle_mdss_axi_clk",	0x22,	CAM_CC,
 					0x0AB, 0, 0, 0x1000, BM(14, 13) },
-		{ "mmss_throttle_video_axi_clk", 0x22,	DISP_CC,
+		{ "mmss_throttle_video_axi_clk", 0x22,	CAM_CC,
 					0x0AC, 0, 0, 0x1000, BM(14, 13) },
 		{ "gpucc_gfx3d_clk",		0x13d,	GPU_CC,
 					0x008, 0, 0, 0, BM(18, 17) },
@@ -3356,14 +3315,14 @@ static int clk_debug_660_probe(struct platform_device *pdev)
 	}
 
 	if (of_get_property(pdev->dev.of_node, "qcom,mmss", NULL)) {
-		gcc_debug_mux.regmap[DISP_CC] =
+		gcc_debug_mux.regmap[CAM_CC] =
 			syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
 					"qcom,mmss");
-		if (IS_ERR(gcc_debug_mux.regmap[DISP_CC]))
-			return PTR_ERR(gcc_debug_mux.regmap[DISP_CC]);
+		if (IS_ERR(gcc_debug_mux.regmap[CAM_CC]))
+			return PTR_ERR(gcc_debug_mux.regmap[CAM_CC]);
 
 		/* Clear the DBG_CLK_DIV bits of the MMSS debug register */
-		regmap_update_bits(gcc_debug_mux.regmap[DISP_CC], 0x0,
+		regmap_update_bits(gcc_debug_mux.regmap[CAM_CC], 0x0,
 						0x15400, 0x0);
 	}
 
@@ -3374,7 +3333,7 @@ static int clk_debug_660_probe(struct platform_device *pdev)
 		if (IS_ERR(gcc_debug_mux.regmap[GPU_CC]))
 			return PTR_ERR(gcc_debug_mux.regmap[GPU_CC]);
 
-		/* Clear the DBG_CLK_DIV bits of the GPU debug register */
+		/* Clear the DBG_CLK_DIV bits of the GPU_CC debug register */
 		regmap_update_bits(gcc_debug_mux.regmap[GPU_CC], 0x0,
 						0x60000, 0x0);
 	}

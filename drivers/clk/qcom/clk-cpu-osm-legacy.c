@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -40,9 +40,6 @@
 #include "clk-regmap.h"
 #include "clk-rcg.h"
 #include "clk-debug.h"
-
-#define BM(msb, lsb)	(((((uint32_t)-1) << (31-msb)) >> (31-msb+lsb)) << lsb)
-#define BVAL(msb, lsb, val)	(((val) << lsb) & BM(msb, lsb))
 
 enum {
 	LMH_LITE_CLK_SRC,
@@ -267,6 +264,8 @@ enum clk_osm_trace_packet_id {
 					(1 << (ACD_REG_RELATIVE_ADDR(addr)))
 
 #define F(f, s, h, m, n) { (f), (s), (2 * (h) - 1), (m), (n) }
+#define BM(msb, lsb) (((((uint32_t)-1) << (31-msb)) >> (31-msb+lsb)) << lsb)
+#define BVAL(msb, lsb, val)     (((val) << lsb) & BM(msb, lsb))
 
 static u32 seq_instr[] = {
 	0xc2005000, 0x2c9e3b21, 0xc0ab2cdc, 0xc2882525, 0x359dc491,
@@ -609,7 +608,7 @@ static inline struct clk_osm *to_clk_osm(struct clk_hw *_hw)
 	return container_of(_hw, struct clk_osm, hw);
 }
 
-static long clk_osm_list_rate(struct clk_hw *hw, unsigned n,
+static long clk_osm_list_rate(struct clk_hw *hw, unsigned int n,
 					unsigned long rate_max)
 {
 	if (n >= hw->init->num_rate_max)
@@ -779,7 +778,7 @@ static unsigned long clk_osm_recalc_rate(struct clk_hw *hw,
 	return cpuclk->osm_table[index].frequency;
 }
 
-static struct clk_ops clk_ops_cpu_osm = {
+const struct clk_ops clk_ops_cpu_osm_660 = {
 	.enable = clk_osm_enable,
 	.set_rate = clk_osm_set_rate,
 	.determine_rate = clk_osm_determine_rate,
@@ -834,13 +833,13 @@ static struct clk_init_data osm_clks_init[] = {
 		.name = "pwrcl_clk",
 		.parent_names = (const char *[]){ "cxo_a" },
 		.num_parents = 1,
-		.ops = &clk_ops_cpu_osm,
+		.ops = &clk_ops_cpu_osm_660,
 	},
 	[1] = {
 		.name = "perfcl_clk",
 		.parent_names = (const char *[]){ "cxo_a" },
 		.num_parents = 1,
-		.ops = &clk_ops_cpu_osm,
+		.ops = &clk_ops_cpu_osm_660,
 	},
 };
 
@@ -2673,7 +2672,7 @@ static ssize_t debugfs_trace_method_get(struct file *file, char __user *buf,
 					size_t count, loff_t *ppos)
 {
 	struct clk_osm *c;
-	int len = 0, rc;
+	int len, rc;
 
 	if (IS_ERR(file) || file == NULL) {
 		pr_err("input error %ld\n", PTR_ERR(file));
@@ -2694,7 +2693,7 @@ static ssize_t debugfs_trace_method_get(struct file *file, char __user *buf,
 	else if (c->trace_method == XOR_PACKET)
 		len = snprintf(debug_buf, sizeof(debug_buf), "xor\n");
 
-	rc = simple_read_from_buffer((void __user *) buf, len, ppos,
+	rc = simple_read_from_buffer((void __user *) buf, count, ppos,
 				     (void *) debug_buf, len);
 
 	mutex_unlock(&debug_buf_mutex);
@@ -2933,7 +2932,7 @@ static void populate_debugfs_dir(struct clk_osm *c)
 	}
 
 	temp = debugfs_create_file("perf_state_met_irq_enable",
-				   S_IRUGO | S_IWUSR,
+				   0644,
 				   c->debugfs, c,
 				   &debugfs_perf_state_met_irq_fops);
 	if (IS_ERR_OR_NULL(temp)) {
@@ -2942,7 +2941,7 @@ static void populate_debugfs_dir(struct clk_osm *c)
 	}
 
 	temp = debugfs_create_file("perf_state_deviation_irq_enable",
-				   S_IRUGO | S_IWUSR,
+				   0644,
 				   c->debugfs, c,
 				   &debugfs_perf_state_deviation_irq_fops);
 	if (IS_ERR_OR_NULL(temp)) {
@@ -2951,7 +2950,7 @@ static void populate_debugfs_dir(struct clk_osm *c)
 	}
 
 	temp = debugfs_create_file("perf_state_deviation_corrected_irq_enable",
-			   S_IRUGO | S_IWUSR,
+			   0644,
 			   c->debugfs, c,
 			   &debugfs_perf_state_deviation_corrected_irq_fops);
 	if (IS_ERR_OR_NULL(temp)) {
@@ -2960,7 +2959,7 @@ static void populate_debugfs_dir(struct clk_osm *c)
 	}
 
 	temp = debugfs_create_file("wdog_trace_enable",
-			   S_IRUGO | S_IWUSR,
+			   0644,
 			   c->debugfs, c,
 			   &debugfs_trace_wdog_enable_fops);
 	if (IS_ERR_OR_NULL(temp)) {
@@ -2969,7 +2968,7 @@ static void populate_debugfs_dir(struct clk_osm *c)
 	}
 
 	temp = debugfs_create_file("trace_enable",
-			   S_IRUGO | S_IWUSR,
+			   0644,
 			   c->debugfs, c,
 			   &debugfs_trace_enable_fops);
 	if (IS_ERR_OR_NULL(temp)) {
@@ -2978,7 +2977,7 @@ static void populate_debugfs_dir(struct clk_osm *c)
 	}
 
 	temp = debugfs_create_file("trace_method",
-			   S_IRUGO | S_IWUSR,
+			   0644,
 			   c->debugfs, c,
 			   &debugfs_trace_method_fops);
 	if (IS_ERR_OR_NULL(temp)) {
@@ -2987,7 +2986,7 @@ static void populate_debugfs_dir(struct clk_osm *c)
 	}
 
 	temp = debugfs_create_file("trace_packet_id",
-			   S_IRUGO | S_IWUSR,
+			   0644,
 			   c->debugfs, c,
 			   &debugfs_trace_packet_id_fops);
 	if (IS_ERR_OR_NULL(temp)) {
@@ -2996,7 +2995,7 @@ static void populate_debugfs_dir(struct clk_osm *c)
 	}
 
 	temp = debugfs_create_file("trace_periodic_timer",
-			   S_IRUGO | S_IWUSR,
+			   0644,
 			   c->debugfs, c,
 			   &debugfs_trace_periodic_timer_fops);
 	if (IS_ERR_OR_NULL(temp)) {
@@ -3005,7 +3004,7 @@ static void populate_debugfs_dir(struct clk_osm *c)
 	}
 
 	temp = debugfs_create_file("acd_debug_reg",
-			   S_IRUGO | S_IWUSR,
+			   0644,
 			   c->debugfs, c,
 			   &debugfs_acd_debug_reg_fops);
 	if (IS_ERR_OR_NULL(temp)) {
@@ -3014,7 +3013,7 @@ static void populate_debugfs_dir(struct clk_osm *c)
 	}
 
 	temp = debugfs_create_file("acd_debug_reg_addr",
-			   S_IRUGO | S_IWUSR,
+			   0644,
 			   c->debugfs, c,
 			   &debugfs_acd_debug_reg_addr_fops);
 	if (IS_ERR_OR_NULL(temp)) {
@@ -3118,9 +3117,6 @@ static int clk_osm_acd_init(struct clk_osm *c)
 	auto_xfer_mask |= ACD_REG_RELATIVE_ADDR_BITMASK(ACD_GFMUX_CFG);
 	clk_osm_acd_master_write_reg(c, auto_xfer_mask, ACD_AUTOXFER_CFG);
 
-	/* ACD has been initialized and enabled for this cluster */
-	c->acd_init = false;
-
 	return 0;
 }
 
@@ -3133,7 +3129,7 @@ static int clk_cpu_osm_driver_probe(struct platform_device *pdev)
 {
 	int rc = 0, cpu, i;
 	int speedbin = 0, pvs_ver = 0;
-	bool is_msm8998 = 0, is_sdm630 = 0;
+	bool is_sdm630 = 0;
 	u32 pte_efuse;
 	int num_clks = ARRAY_SIZE(osm_qcom_clk_hws);
 	struct clk *clk;
@@ -3246,19 +3242,7 @@ static int clk_cpu_osm_driver_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-	is_sdm630 = of_device_is_compatible(pdev->dev.of_node,
-					"qcom,clk-cpu-osm-sdm630");
-
-	is_msm8998 =    of_device_is_compatible(pdev->dev.of_node,
-					"qcom,clk-cpu-osm-msm8998-v1") ||
-			of_device_is_compatible(pdev->dev.of_node,
-					"qcom,clk-cpu-osm-msm8998-v2");
-
-	if (is_msm8998)
-		rc = clk_osm_resolve_crossover_corners(&pwrcl_clk, pdev,
-				"qcom,pwrcl-apcs-mem-acc-threshold-voltage");
-	else
-		rc = clk_osm_resolve_crossover_corners(&pwrcl_clk, pdev, NULL);
+	rc = clk_osm_resolve_crossover_corners(&pwrcl_clk, pdev, NULL);
 	if (rc)
 		dev_info(&pdev->dev, "No APM crossover corner programmed\n");
 
@@ -3407,14 +3391,11 @@ static int clk_cpu_osm_driver_probe(struct platform_device *pdev)
 		     "Failed to enable clock for cpu %d\n", cpu);
 	}
 
+	is_sdm630 = of_device_is_compatible(pdev->dev.of_node,
+					"qcom,clk-cpu-osm-sdm630");
 	if (is_sdm630) {
 		pwrcl_boot_rate = 1382400000;
 		perfcl_boot_rate = 1670400000;
-	}
-
-	if (is_msm8998) {
-		pwrcl_boot_rate = 1555200000;
-		perfcl_boot_rate = 1728000000;
 	}
 
 	/* Set final boot rate */
@@ -3440,7 +3421,7 @@ static int clk_cpu_osm_driver_probe(struct platform_device *pdev)
 
 	register_cpu_cycle_counter_cb(&cb);
 
-	pr_info("OSM driver inited\n");
+	pr_info("OSM driver initialize\n");
 	put_online_cpus();
 
 	return 0;
@@ -3460,8 +3441,6 @@ exit:
 static const struct of_device_id match_table[] = {
 	{ .compatible = "qcom,clk-cpu-osm" },
 	{ .compatible = "qcom,clk-cpu-osm-sdm630" },
-	{ .compatible = "qcom,clk-cpu-osm-msm8998-v1" },
-	{ .compatible = "qcom,clk-cpu-osm-msm8998-v2" },
 	{}
 };
 

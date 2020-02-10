@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -37,33 +37,33 @@
 
 static DEFINE_VDD_REGULATORS(vdd_dig, VDD_DIG_NUM, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_mx, VDD_DIG_NUM, 1, vdd_corner);
-static DEFINE_VDD_REGULATORS(vdd_gfx, VDD_DIG_NUM, 1, vdd_corner);
+static DEFINE_VDD_REGS_INIT(vdd_gfx, 1);
 
 enum {
-	P_GPU_XO,
 	P_CORE_BI_PLL_TEST_SE,
 	P_GPLL0_OUT_MAIN,
 	P_GPLL0_OUT_MAIN_DIV,
 	P_GPU_PLL0_PLL_OUT_MAIN,
 	P_GPU_PLL1_PLL_OUT_MAIN,
+	P_XO,
 };
 
 static const struct parent_map gpucc_parent_map_0[] = {
-	{ P_GPU_XO, 0 },
+	{ P_XO, 0 },
 	{ P_GPLL0_OUT_MAIN, 5 },
 	{ P_GPLL0_OUT_MAIN_DIV, 6 },
 	{ P_CORE_BI_PLL_TEST_SE, 7 },
 };
 
 static const char * const gpucc_parent_names_0[] = {
-	"gpucc_cxo_clk",
+	"cxo_a",
 	"gcc_gpu_gpll0_clk",
 	"gcc_gpu_gpll0_div_clk",
 	"core_bi_pll_test_se",
 };
 
 static const struct parent_map gpucc_parent_map_1[] = {
-	{ P_GPU_XO, 0 },
+	{ P_XO, 0 },
 	{ P_GPU_PLL0_PLL_OUT_MAIN, 1 },
 	{ P_GPU_PLL1_PLL_OUT_MAIN, 3 },
 	{ P_GPLL0_OUT_MAIN, 5 },
@@ -71,7 +71,7 @@ static const struct parent_map gpucc_parent_map_1[] = {
 };
 
 static const char * const gpucc_parent_names_1[] = {
-	"gpucc_cxo_clk",
+	"xo",
 	"gpu_pll0_pll_out_main",
 	"gpu_pll1_pll_out_main",
 	"gcc_gpu_gpll0_clk",
@@ -89,7 +89,7 @@ static const struct alpha_pll_config gpu_pll0_config = {
 	.l = 0x29,
 	.config_ctl_val = 0x4001055b,
 	.alpha = 0xaaaaab00,
-	.alpha_hi = 0xaa,
+	.alpha_u = 0xaa,
 	.alpha_en_mask = BIT(24),
 	.vco_val = 0x2 << 20,
 	.vco_mask = 0x3 << 20,
@@ -103,7 +103,6 @@ static struct pll_vco_data pll_data[] = {
 
 static struct clk_alpha_pll gpu_pll0_pll_out_main = {
 	.offset = 0x0,
-	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
 	.vco_table = gpu_vco,
 	.num_vco = ARRAY_SIZE(gpu_vco),
 	.vco_data = pll_data,
@@ -111,7 +110,7 @@ static struct clk_alpha_pll gpu_pll0_pll_out_main = {
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "gpu_pll0_pll_out_main",
-			.parent_names = (const char *[]){ "gpucc_cxo_clk" },
+			.parent_names = (const char *[]){ "xo" },
 			.num_parents = 1,
 			.ops = &clk_alpha_pll_ops,
 			VDD_GPU_PLL_FMAX_MAP1(LOW_L1, 1500000000),
@@ -121,7 +120,6 @@ static struct clk_alpha_pll gpu_pll0_pll_out_main = {
 
 static struct clk_alpha_pll gpu_pll1_pll_out_main = {
 	.offset = 0x40,
-	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
 	.vco_table = gpu_vco,
 	.num_vco = ARRAY_SIZE(gpu_vco),
 	.vco_data = pll_data,
@@ -129,7 +127,7 @@ static struct clk_alpha_pll gpu_pll1_pll_out_main = {
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "gpu_pll1_pll_out_main",
-			.parent_names = (const char *[]){ "gpucc_cxo_clk" },
+			.parent_names = (const char *[]){ "xo" },
 			.num_parents = 1,
 			.ops = &clk_alpha_pll_ops,
 			VDD_GPU_PLL_FMAX_MAP1(LOW_L1, 1500000000),
@@ -142,7 +140,7 @@ static struct clk_init_data gpu_clks_init[] = {
 	[0] = {
 		.name = "gfx3d_clk_src",
 		.parent_names = gpucc_parent_names_1,
-		.num_parents = 4,
+		.num_parents = 3,
 		.ops = &clk_gfx3d_src_ops,
 		.flags = CLK_SET_RATE_PARENT,
 	},
@@ -169,13 +167,13 @@ static struct clk_init_data gpu_clks_init[] = {
  *  | 266000000 | 532000000    |    1        |    2    |
  *  | 370000000 | 740000000    |    1        |    2    |
  *  | 465000000 | 930000000    |    1        |    2    |
- *  | 585000000 | 1170000000   |    1        |    2    |
  *  | 588000000 | 1176000000   |    1        |    2    |
  *  | 647000000 | 1294000000   |    1        |    2    |
  *  | 700000000 | 1400000000   |    1        |    2    |
  *  | 750000000 | 1500000000   |    1        |    2    |
  *  ====================================================
-*/
+ */
+
 static const struct freq_tbl ftbl_gfx3d_clk_src[] = {
 	F_GFX( 19200000, 0,  1, 0, 0,         0),
 	F_GFX(160000000, 0,  2, 0, 0,  640000000),
@@ -204,32 +202,18 @@ static const struct freq_tbl ftbl_gfx3d_clk_src_630[] = {
 	{ }
 };
 
-
 static struct clk_rcg2 gfx3d_clk_src = {
 	.cmd_rcgr = 0x1070,
 	.mnd_width = 0,
 	.hid_width = 5,
 	.freq_tbl = ftbl_gfx3d_clk_src,
-	.enable_safe_config = true,
 	.parent_map = gpucc_parent_map_1,
 	.flags = FORCE_ENABLE_RCG,
 	.clkr.hw.init = &gpu_clks_init[0],
 };
 
-static struct clk_branch gpucc_gfx3d_clk = {
-	.halt_reg = 0x1098,
-	.halt_check = BRANCH_HALT,
-	.hwcg_reg = 0x1098,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x1098,
-		.enable_mask = BIT(0),
-		.hw.init = &gpu_clks_init[1],
-	},
-};
-
 static const struct freq_tbl ftbl_rbbmtimer_clk_src[] = {
-	F(19200000, P_GPU_XO, 1, 0, 0),
+	F(19200000, P_XO, 1, 0, 0),
 	{ }
 };
 
@@ -249,7 +233,7 @@ static struct clk_rcg2 rbbmtimer_clk_src = {
 };
 
 static const struct freq_tbl ftbl_rbcpr_clk_src[] = {
-	F(19200000, P_GPU_XO, 1, 0, 0),
+	F(19200000, P_XO, 1, 0, 0),
 	F(50000000, P_GPLL0_OUT_MAIN_DIV, 6, 0, 0),
 	{ }
 };
@@ -282,6 +266,16 @@ static struct clk_branch gpucc_cxo_clk = {
 			.num_parents = 1,
 			.ops = &clk_branch2_ops,
 		},
+	},
+};
+
+static struct clk_branch gpucc_gfx3d_clk = {
+	.halt_reg = 0x1098,
+	.halt_check = BRANCH_HALT,
+	.clkr = {
+		.enable_reg = 0x1098,
+		.enable_mask = BIT(0),
+		.hw.init = &gpu_clks_init[1],
 	},
 };
 
@@ -328,6 +322,7 @@ static struct clk_regmap *gpucc_660_clocks[] = {
 	[GPUCC_GFX3D_CLK] = &gpucc_gfx3d_clk.clkr,
 	[GPUCC_RBBMTIMER_CLK] = &gpucc_rbbmtimer_clk.clkr,
 	[RBBMTIMER_CLK_SRC] = &rbbmtimer_clk_src.clkr,
+	[GPUCC_CXO_CLK] = &gpucc_cxo_clk.clkr,
 };
 
 static const struct regmap_config gpucc_660_regmap_config = {
@@ -483,13 +478,8 @@ static int gpucc_660_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to register GPUCC clocks\n");
 		return ret;
 	}
-//800000000
-//1176000000
-//	clk_set_rate(gpu_pll1_pll_out_main.clkr.hw.clk, 1176000000);
-//	clk_set_rate(gpu_pll0_pll_out_main.clkr.hw.clk, 1294250000);
 
-	clk_set_rate(gpu_pll1_pll_out_main.clkr.hw.clk, 740000000);
-	clk_set_rate(gpu_pll0_pll_out_main.clkr.hw.clk, 800000000);
+	clk_prepare_enable(gpucc_cxo_clk.clkr.hw.clk);
 
 	dev_info(&pdev->dev, "Registered GPUCC clocks\n");
 
@@ -508,7 +498,7 @@ static int __init gpucc_660_init(void)
 {
 	return platform_driver_register(&gpucc_660_driver);
 }
-core_initcall_sync(gpucc_660_init);
+arch_initcall(gpucc_660_init);
 
 static void __exit gpucc_660_exit(void)
 {
@@ -518,7 +508,6 @@ module_exit(gpucc_660_exit);
 
 /* GPU RBCPR Clocks */
 static struct clk_regmap *gpucc_rbcpr_660_clocks[] = {
-	[GPUCC_CXO_CLK] = &gpucc_cxo_clk.clkr,
 	[RBCPR_CLK_SRC] = &rbcpr_clk_src.clkr,
 	[GPUCC_RBCPR_CLK] = &gpucc_rbcpr_clk.clkr,
 };
@@ -538,16 +527,8 @@ MODULE_DEVICE_TABLE(of, gpucc_rbcpr_660_match_table);
 static int gpu_660_probe(struct platform_device *pdev)
 {
 	int ret = 0;
-	struct clk *tmp;
-	struct regmap *regmap;
 
-	tmp = devm_clk_get(&pdev->dev, "gpll0");
-	if (IS_ERR(tmp)) {
-		if (PTR_ERR(tmp) != -EPROBE_DEFER)
-			dev_err(&pdev->dev,
-				"The GPLL0 clock cannot be found.\n");
-		return PTR_ERR(tmp);
-	}
+	struct regmap *regmap;
 
 	regmap = qcom_cc_map(pdev, &gpu_660_desc);
 	if (IS_ERR(regmap))
@@ -559,14 +540,6 @@ static int gpu_660_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	/* Set the rate for GPU XO to make the clk API happy */
-	clk_set_rate(gpucc_cxo_clk.clkr.hw.clk, 19200000);
-
-	/*
-	 * gpucc_xo works as the root clock for all GPUCC RCGs and GDSCs.
-	 *  Keep it enabled always.
-	 */
-	clk_prepare_enable(gpucc_cxo_clk.clkr.hw.clk);
 
 	dev_info(&pdev->dev, "Registered GPU RBCPR clocks\n");
 
