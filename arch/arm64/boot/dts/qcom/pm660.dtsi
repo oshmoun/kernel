@@ -294,7 +294,7 @@
 		};
 
 		bcl_sensor: bcl@4200 {
-			compatible = "qcom,msm-bcl-lmh";
+			compatible = "qcom,msm-bcl";
 			reg = <0x4200 0xff>,
 				<0x4300 0xff>;
 			reg-names = "fg_user_adc",
