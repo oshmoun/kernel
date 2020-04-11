@@ -113,21 +113,27 @@ static int dsi_panel_driver_touch_pinctrl_set_state(
 	pin_state = active ? panel->pinctrl.touch_state_active
 				: panel->pinctrl.touch_state_suspend;
 
-	if (!IS_ERR_OR_NULL(pin_state)) {
-		rc = pinctrl_select_state(panel->pinctrl.pinctrl,
-				pin_state);
-		if (!rc) {
-			wait = active ? spec_pdata->touch_intn
-					: spec_pdata->touch_intn_off;
-			if (wait)
-				usleep_range(wait * 1000, wait * 1000 + 100);
-		} else {
-			pr_err("%s: can not set %s pins\n", __func__,
-			       active ? SDE_PINCTRL_STATE_TOUCH_ACTIVE
-			       : SDE_PINCTRL_STATE_TOUCH_SUSPEND);
-		}
+	// if no touch pinstates are defined, then return
+	if (!pin_state) {
+		return rc;
+	}
+
+	if (IS_ERR(pin_state)) {
+		pr_err("%s: invalid '%s' pinstate %d\n", __func__,
+		       active ? SDE_PINCTRL_STATE_TOUCH_ACTIVE
+		       : SDE_PINCTRL_STATE_TOUCH_SUSPEND, pin_state);
+		return rc;
+	}
+	
+	rc = pinctrl_select_state(panel->pinctrl.pinctrl,
+			pin_state);
+	if (!rc) {
+		wait = active ? spec_pdata->touch_intn
+				: spec_pdata->touch_intn_off;
+		if (wait)
+			usleep_range(wait * 1000, wait * 1000 + 100);
 	} else {
-		pr_err("%s: invalid '%s' pinstate\n", __func__,
+		pr_err("%s: can not set %s pins\n", __func__,
 		       active ? SDE_PINCTRL_STATE_TOUCH_ACTIVE
 		       : SDE_PINCTRL_STATE_TOUCH_SUSPEND);
 	}
