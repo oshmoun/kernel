@@ -127,7 +127,8 @@ static int dsi_panel_driver_touch_pinctrl_set_state(
 			       : SDE_PINCTRL_STATE_TOUCH_SUSPEND);
 		}
 	} else {
-		pr_err("%s: invalid '%s' pinstate\n", __func__,
+		// only log once because touch pinstates are not crucial
+		pr_err_once("%s: invalid '%s' pinstate\n", __func__,
 		       active ? SDE_PINCTRL_STATE_TOUCH_ACTIVE
 		       : SDE_PINCTRL_STATE_TOUCH_SUSPEND);
 	}
