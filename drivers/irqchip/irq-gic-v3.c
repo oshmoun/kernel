@@ -1617,14 +1617,9 @@ out_put_node:
 void gic_plat_init_qcom_quirks(void)
 {
 #ifdef CONFIG_PM
-	gic_v3_plat_syscore_ops.suspend = gic_v3_qcom_suspend;
-	gic_v3_plat_syscore_ops.resume = gic_v3_qcom_resume;
-
-	gic_chip.irq_set_wake = gic_v3_qcom_set_wake;
+	gic_chip.flags	|= IRQCHIP_SKIP_SET_WAKE | IRQCHIP_MASK_ON_SUSPEND;
 #endif
-
-	gic_chip.irq_disable = gic_v3_qcom_disable_irq;
-	gic_eoimode1_chip.irq_disable = gic_v3_qcom_disable_irq;
+	gic_eoimode1_chip.flags	|= IRQCHIP_SKIP_SET_WAKE | IRQCHIP_MASK_ON_SUSPEND;
 }
 
 static void __init gic_of_setup_kvm_info(struct device_node *node)
